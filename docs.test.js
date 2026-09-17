@@ -44,6 +44,17 @@ it('the check count it quotes is the check count the suite reports', () => {
   assert.equal(claimed[1], actual[1], `README says ${claimed[1]} checks, the suite ran ${actual[1]}`);
 });
 
+it('the install command it gives is one that works today', () => {
+  // The first code block in a README is the highest-traffic line in a project, and the obvious
+  // `npm install faultgraph` 404s until somebody publishes. Promising an install that fails is
+  // worse than promising nothing.
+  const install = /```bash\n(npm install [^\n]+)\n```/.exec(README);
+  assert.ok(install, 'the README no longer shows how to install it');
+  assert.ok(!/^npm install faultgraph$/.test(install[1]),
+    'the README says `npm install faultgraph`, which 404s — publish it first, then change this test');
+  assert.match(install[1], /github:|file:|@/, `unrecognised install route: ${install[1]}`);
+});
+
 it('every function it documents is actually exported', () => {
   for (const name of ['parse', 'spaceFor', 'next', 'prune', 'entropy', 'merge']) {
     assert.ok(README.includes(`${name}(`), `${name} is exported but undocumented`);

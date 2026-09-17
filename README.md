@@ -4,8 +4,13 @@
 diagnose with.** Zero dependencies, no network, no model.
 
 ```bash
-npm install faultgraph
+npm install github:vidigoat/faultgraph
 ```
+
+Not on the npm registry yet — the name is unclaimed, and `npm install faultgraph` would 404 today.
+Installing from GitHub gets the same thing. (Written this way on purpose: a README whose first code
+block does not work is the fastest way to lose a reader, and "it'll be published soon" is not an
+install command.)
 
 ```js
 const { parse, spaceFor, next, prune } = require('faultgraph');
@@ -242,7 +247,7 @@ number that happens to look like a code is not a fault entry.
 ## Tests
 
 ```bash
-npm test      # 43 checks, no network — plus 6 that check this README against the code
+npm test      # 43 checks, no network — plus 7 that check this README against the code
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
