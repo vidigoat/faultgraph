@@ -135,6 +135,33 @@ it('a page that is not a fault table recovers nothing, and says so', () => {
   assert.equal(graph.coverage, 'nothing usable found');
 });
 
+it('the two ways of finding nothing are told apart', () => {
+  /*
+   * Both used to be "nothing usable found", and they need opposite things from the person holding
+   * the manual. A wrong page means go and find the fault table. A two-column layout means you are
+   * already looking at the right page and the parser cannot read it — telling that person to keep
+   * hunting sends them looking for something on the page in their hands.
+   */
+  const wrongPage = parse('Before first use, remove all packaging. Install by a competent person.');
+  assert.equal(wrongPage.found, 0);
+  assert.equal(wrongPage.orphanCodes, 0);
+  assert.equal(wrongPage.coverage, 'nothing usable found');
+
+  // Remedies to the RIGHT of the code rather than below it. A real and common table layout.
+  const twoColumn = parse('E24  Water cannot leave    Check the drain filter\nE15  Water in base tray    Check the door seal');
+  assert.equal(twoColumn.found, 0, 'the fixture has stopped being unparseable');
+  assert.equal(twoColumn.orphanCodes, 2, 'codes were seen and not counted');
+  assert.match(twoColumn.coverage, /none with remedies beneath them/);
+  assert.match(twoColumn.coverage, /column to the right/, 'it does not say what is probably wrong');
+  assert.notEqual(twoColumn.coverage, wrongPage.coverage);
+});
+
+it('a page it reads fully reports no orphans', () => {
+  const graph = parse(BOSCH);
+  assert.equal(graph.orphanCodes, 0, 'a clean parse is reporting codes it could not use');
+  assert.match(graph.coverage, /recovered/);
+});
+
 it('an answer that rules out everything is a contradiction, not certainty', () => {
   const graph = parse(BOSCH);
   const { space } = fg.spaceFor(graph, 'E24');

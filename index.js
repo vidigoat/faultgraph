@@ -181,6 +181,18 @@ function joinOrphanCodes(lines) {
 }
 
 /**
+ * How to describe what came back, including the two different ways it can be empty.
+ */
+function coverageOf(found, orphanCodes) {
+  if (found > 0) return `${found} fault code${found === 1 ? '' : 's'} recovered`;
+  if (orphanCodes > 0) {
+    return `${orphanCodes} fault code${orphanCodes === 1 ? '' : 's'} seen, none with remedies beneath them — ` +
+      'this looks like the right page in a layout I cannot read (remedies in a column to the right?)';
+  }
+  return 'nothing usable found';
+}
+
+/**
  * Read a fault table out of manual text.
  *
  * @param {object}  arg
@@ -199,6 +211,10 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
   const onPage = (idx) => (lines.origin ? lines.origin[idx] : idx) + 1;
   const codes = {};
   let found = 0;
+  // Codes that looked like codes but had no remedies beneath them. Counted separately, because
+  // "this page has no fault table on it" and "this page has one and I could not read its layout"
+  // are different problems with different fixes, and they were sharing a sentence.
+  let orphanCodes = 0;
 
   lines.forEach((line, i) => {
     const m = matchCodeLine(line);
@@ -237,7 +253,7 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
       source: { line: atLine[k], codeLine: onPage(i), manual: sourceName },
     }));
 
-    if (causes.length === 0) return;
+    if (causes.length === 0) { orphanCodes++; return; }
     found++;
 
     // A remedy check tests exactly one cause, so a table of them is irreducibly linear: a "no"
@@ -274,7 +290,19 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
     found,
     // Meant to be shown, not logged. Two codes recovered from a 90-page manual is a thin graph, and
     // a caller that does not say so implies it read the whole book.
-    coverage: found === 0 ? 'nothing usable found' : `${found} fault code${found === 1 ? '' : 's'} recovered`,
+    coverage: coverageOf(found, orphanCodes),
+    /*
+     * Codes that matched but carried no remedies. This is the difference between the two ways a
+     * parse comes back empty, and they need different things from the person holding the manual:
+     *
+     *   0 codes, 0 orphans   wrong page. Find the fault-table page.
+     *   0 codes, 5 orphans   RIGHT page — and the remedies are not underneath the codes. Almost
+     *                        always a two-column layout, where the remedy sits to the right.
+     *
+     * Reporting the second as "nothing usable found" sends somebody hunting for a page they are
+     * already looking at.
+     */
+    orphanCodes,
   };
 }
 

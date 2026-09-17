@@ -106,6 +106,19 @@ parse({ text: 'Before first use, remove all packaging…' }).coverage
 // 'nothing usable found'
 ```
 
+It also tells apart the two ways of finding nothing, because they need opposite things from the
+person holding the manual:
+
+```js
+parse({ text: twoColumnTable }).coverage
+// '2 fault codes seen, none with remedies beneath them — this looks like the right page
+//  in a layout I cannot read (remedies in a column to the right?)'
+```
+
+A wrong page means go and find the fault table. A layout it cannot read means you are already
+looking at the right page — and reporting that as "nothing usable found" sends somebody hunting for
+something in their hands. `orphanCodes` carries the count.
+
 This matters because the output is meant to be **acted on** — somebody opening a machine, or
 spending money on a part. A plausible-sounding invented remedy is worse than no answer at all. So:
 
@@ -235,7 +248,8 @@ number that happens to look like a code is not a fault entry.
 - **It does not know what anything costs.** `cost` is always `null` from a parse. Prices come from
   service data, which is a different kind of source.
 - **It does not handle a table split across a page break**, or one where the remedy column is to the
-  *right* of the code rather than below it. Both would need layout information this does not have.
+  *right* of the code rather than below it. Both would need layout information this does not have —
+  but it recognises the second case and says so rather than claiming the page was empty.
 - **It does not do multi-code faults.** One code, one hypothesis space.
 - **The priors are ordinal, not measured.** `1/(k + 1.6)` turns rank into a number. It encodes "the
   manufacturer listed this first" and nothing more; it is not a failure rate.
@@ -247,7 +261,7 @@ number that happens to look like a code is not a fault entry.
 ## Tests
 
 ```bash
-npm test      # 43 checks, no network — plus 7 that check this README against the code
+npm test      # 45 checks, no network — plus 7 that check this README against the code
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
