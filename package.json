@@ -1,0 +1,38 @@
+{
+  "name": "faultgraph",
+  "version": "1.0.0",
+  "description": "Read the fault-code table out of an equipment service manual and turn it into a diagnosable graph. Zero dependencies.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test.js && node readme.test.js",
+    "example": "node examples/diagnose.js"
+  },
+  "keywords": [
+    "service-manual",
+    "fault-code",
+    "diagnostics",
+    "repair",
+    "parser",
+    "troubleshooting",
+    "right-to-repair"
+  ],
+  "author": "Vidit Patankar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vidigoat/faultgraph.git"
+  },
+  "homepage": "https://github.com/vidigoat/faultgraph#readme",
+  "bugs": {
+    "url": "https://github.com/vidigoat/faultgraph/issues"
+  }
+}
