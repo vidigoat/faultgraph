@@ -14,7 +14,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test.js && node readme.test.js",
+    "test": "node test.js && node docs.test.js",
     "example": "node examples/diagnose.js"
   },
   "keywords": [

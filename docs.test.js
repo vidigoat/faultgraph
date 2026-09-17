@@ -1,11 +1,15 @@
 /**
  * The README is a claim. This checks it.
  *
- *   node readme.test.js
+ *   node docs.test.js
  *
  * A README that drifts from the code is the most common lie a library tells, and it is told by
  * accident: a number was true when it was typed. Every figure quoted in README.md is re-derived
  * here from the library itself, so drifting breaks the build rather than misleading a reader.
+ *
+ * Named `docs.test.js` rather than the obvious `readme.test.js` because npm force-includes any file
+ * matching README* in the published tarball, whatever `files` says — so the obvious name shipped a
+ * test file to everyone who installed the library.
  */
 
 const assert = require('node:assert');
