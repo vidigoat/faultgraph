@@ -171,9 +171,11 @@ const ACROSS_PAGES = [
   'Appliance does not     The door is not closed.',
   'start.                    Close the door.',
   '38',
-  'Fault                  Cause and troubleshooting',
-  'Appliance door cannot  The lock is engaged.',
-  'be closed.                Release the lock.',
+  // Page 39 sets the SAME table four columns further right. The typesetter laid each page out on
+  // its own, and nothing says the two agree.
+  'Fault                      Cause and troubleshooting',
+  'Appliance door cannot      The lock is engaged.',
+  'be closed.                    Release the lock.',
 ].join('\n');
 
 it('a page number stranded mid-table is not a symptom', () => {
@@ -196,6 +198,21 @@ it('and the real rows on both sides of the break survive', () => {
   const r = readSymptoms({ text: ACROSS_PAGES, sourceName: 'Bosch manual' });
   const names = r.symptoms.map((s) => s.symptom);
   assert.deepEqual(names, ['Appliance does not start.', 'Appliance door cannot be closed.']);
+});
+
+it('the columns are re-anchored where the header repeats', () => {
+  /*
+   * The worst of the three, because it was silent. Page 38 sets its table at one column and page 39
+   * sets the same table four further right — each page laid out on its own — and carrying the first
+   * boundary across the seam put every cause on the second page to the right of where the parser
+   * looked. The indent rule then read them as REMEDIES, and five symptoms came back with no cause
+   * at all, their cause text swallowed into the step list. Nothing about the output looked broken.
+   */
+  const r = readSymptoms({ text: ACROSS_PAGES, sourceName: 'Bosch manual' });
+  const after = r.symptoms.find((s) => s.symptom.startsWith('Appliance door'));
+  assert.ok(after, 'the row after the break went missing');
+  assert.equal(after.causes[0].label, 'The lock is engaged.', 'the cause after the break was lost');
+  assert.deepEqual(after.causes[0].remedies, ['Release the lock.']);
 });
 
 /* ── explanation is not a cause ───────────────────────────────────────────── */

@@ -89,7 +89,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
     return { found: 0, symptoms: [], boundary: null, coverage: 'no column header on this page, so no table to read' };
   }
 
-  const { at } = boundary;
+  let { at } = boundary;
   const symptoms = [];
   let current = null;   // the symptom being built
   let cause = null;     // the cause being built, inside it
@@ -114,6 +114,22 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * repeat of the header line is the table introducing itself again on the next page.
      */
     if (PAGE_NUMBER.test(raw) || HEADER.test(raw)) {
+      /*
+       * A repeated header is also where the columns MOVE.
+       *
+       * Page 38 sets its table at column 23 and page 39 sets the same table at 27, because the
+       * typesetter laid each page out on its own. Carrying the first page's boundary across the
+       * seam put every cause on the second page three columns to the right of where the parser
+       * expected it — so the indent rule read them as remedies and five symptoms came back with no
+       * cause at all, their cause text swallowed into the step list.
+       *
+       * So the boundary is re-anchored here rather than fixed once for the whole run.
+       */
+      const again = HEADER.exec(raw);
+      if (again) {
+        const moved = raw.indexOf(again[2]);
+        if (moved > 4) at = moved;
+      }
       leftWasBlank = true;
       current = null;
       cause = null;
