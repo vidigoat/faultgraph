@@ -159,6 +159,45 @@ it('a numbered step is a remedy wherever it is printed', () => {
   assert.ok(!/^\d\./.test(s.causes[0].remedies[0]), 'the step number was kept as content');
 });
 
+/* ── a table that runs across a page break ───────────────────────────────── */
+
+/*
+ * Real, from SHE41CM2N, whose troubleshooting table runs pages 38 to 39. Joining the two pages —
+ * which is necessary, or a symptom is split from its causes at the seam — drops page 38's number
+ * and page 39's column header right into the middle of the rows.
+ */
+const ACROSS_PAGES = [
+  'Fault                  Cause and troubleshooting',
+  'Appliance does not     The door is not closed.',
+  'start.                    Close the door.',
+  '38',
+  'Fault                  Cause and troubleshooting',
+  'Appliance door cannot  The lock is engaged.',
+  'be closed.                Release the lock.',
+].join('\n');
+
+it('a page number stranded mid-table is not a symptom', () => {
+  /*
+   * It was. The parser produced a symptom called "38", with a cause scavenged from the real row
+   * beside it, sitting in the list between two genuine ones.
+   */
+  const r = readSymptoms({ text: ACROSS_PAGES, sourceName: 'Bosch manual' });
+  assert.ok(!r.symptoms.some((s) => /^\d+$/.test(s.symptom)), 'a page number was read as a symptom');
+});
+
+it('the header repeating on the next page is not a symptom either', () => {
+  // Same seam, same cause: the table introduces itself again and the parser believed it.
+  const r = readSymptoms({ text: ACROSS_PAGES, sourceName: 'Bosch manual' });
+  assert.ok(!r.symptoms.some((s) => /^Fault$/i.test(s.symptom)), 'the column header was read as a symptom');
+});
+
+it('and the real rows on both sides of the break survive', () => {
+  // The point of joining pages in the first place.
+  const r = readSymptoms({ text: ACROSS_PAGES, sourceName: 'Bosch manual' });
+  const names = r.symptoms.map((s) => s.symptom);
+  assert.deepEqual(names, ['Appliance does not start.', 'Appliance door cannot be closed.']);
+});
+
 /* ── explanation is not a cause ───────────────────────────────────────────── */
 
 /*

@@ -19,6 +19,9 @@
 /** The two headings these tables use. The capture is what fixes the column boundary. */
 const HEADER = /^(\s*)(?:Fault|Problem|Symptom)\s{2,}(Cause and troubleshooting|Cause and remedy|Cause\b.*)$/im;
 
+/** A page number stranded mid-table by a page break. No manual prints a symptom that is only digits. */
+const PAGE_NUMBER = /^\s*\d{1,4}\s*$/;
+
 /** A cross-reference, not a remedy. `"Adding rinse aid", Page 16` tells you where to read, not what to do. */
 const CROSS_REFERENCE = /^["“].*["”],?\s*(?:Page|page)\s+\d+/;
 
@@ -99,6 +102,24 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
   for (let i = boundary.line + 1; i < lines.length; i++) {
     const raw = lines[i];
     if (!raw.trim()) { leftWasBlank = true; continue; }
+
+    /*
+     * Page furniture, in the middle of a table that runs across a page break.
+     *
+     * Joining pages 38 and 39 puts page 38's number and page 39's column header right in the
+     * middle of the rows, and the parser read both as symptoms: one called "38" and one called
+     * "Fault", each with a cause underneath it scavenged from the real row next to it.
+     *
+     * A bare number is a page number — no manual prints a symptom that is only digits — and a
+     * repeat of the header line is the table introducing itself again on the next page.
+     */
+    if (PAGE_NUMBER.test(raw) || HEADER.test(raw)) {
+      leftWasBlank = true;
+      current = null;
+      cause = null;
+      lastKind = null;
+      continue;
+    }
 
     /*
      * The boundary is a guide, not a guillotine — and sometimes there is no boundary at all.
