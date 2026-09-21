@@ -72,6 +72,16 @@ const CODE_IN_SENTENCE =
 /* Words that would otherwise read as a letter-only fault code at the start of a line. */
 const NOT_A_CODE = new Set(['THE', 'AND', 'FOR', 'ARE', 'NOT', 'YOU', 'USE', 'SEE', 'ALL', 'ANY', 'CAN', 'ITS', 'OFF', 'ON', 'IF', 'IN', 'TO', 'OF', 'OR', 'AT', 'IS', 'IT', 'BE', 'DO', 'NO', 'WARNING', 'NOTE']);
 
+/**
+ * Phrases that are not a description of a fault.
+ *
+ * "E:07 is lit." parses cleanly — code, then six-plus characters of text — and hands back the
+ * meaning "is lit.", which tells a reader nothing and looks like a bug in the interface. The page
+ * simply does not state a meaning for these codes; the causes carry all of it. An empty meaning is
+ * the honest answer and the caller can decide how to show a code with no description.
+ */
+const NOT_A_MEANING = /^(?:is\s+)?(?:lit|shown|displayed|flashing|on|appears|illuminated)\.?$/i;
+
 function matchCodeLine(line) {
   const sentence = CODE_IN_SENTENCE.exec(line);
   if (sentence && !NOT_A_CODE.has(sentence[1].toUpperCase().replace(/[:\-\s]/g, ''))) {
@@ -247,7 +257,9 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
     if (!m) return;
 
     const code = normaliseCode(m[1]);
-    const description = m[2].trim();
+    const raw = m[2].trim();
+    // "is lit" is not a fault description. Better an empty meaning than a meaningless one.
+    const description = NOT_A_MEANING.test(raw) ? '' : raw;
 
     /*
      * Remedy lines directly beneath a code line usually belong to it — and so do the lines between
@@ -279,6 +291,30 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
     for (let j = i + 1; j < Math.min(i + 12, lines.length); j++) {
       const text = lines[j].trim();
       if (!text || CODE_LINE.test(lines[j])) break;
+
+      /*
+       * An explicitly labelled row beats any inference.
+       *
+       * A transcription that says `REASON:` and `REMEDY:` has already told us which cell is which,
+       * and guessing from verbs when the answer is written down would be perverse. "Water
+       * protection system activated" carries no remedy verb and "Turn off water supply" does, so
+       * the inference happens to work here — but "Check the door seal" as a REASON would fool it,
+       * and a labelled line never can.
+       */
+      const labelled = /^(REASON|CAUSE|REMEDY|ACTION|REMEDIAL ACTION)\s*:\s*(.+)$/i.exec(text);
+      if (labelled) {
+        const kind = labelled[1].toUpperCase();
+        const body = labelled[2].trim();
+        if (kind === 'REASON' || kind === 'CAUSE') {
+          pendingReason = body;
+        } else {
+          following.push(body);
+          atLine.push(onPage(j));
+          statedCause.push(pendingReason);
+          pendingReason = null;
+        }
+        continue;
+      }
 
       if (REMEDY_HINTS.test(text)) {
         following.push(text);

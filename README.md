@@ -261,7 +261,7 @@ number that happens to look like a code is not a fault entry.
 ## Tests
 
 ```bash
-npm test      # 50 checks, no network — plus 7 that check this README against the code
+npm test      # 52 checks, no network — plus 7 that check this README against the code
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

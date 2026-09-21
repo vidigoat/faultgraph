@@ -280,6 +280,41 @@ it("the manufacturer's stated reason is preferred to our derived one", () => {
   assert.ok(labels.includes('Siphon connection still sealed'));
 });
 
+it('an explicitly labelled row beats inferring from verbs', () => {
+  /*
+   * A vision transcription that says REASON: and REMEDY: has already said which cell is which, and
+   * guessing from verbs when the answer is written down would be perverse. The inference happens to
+   * work on most rows — but "Check the door seal" as a REASON would fool it completely, and a
+   * labelled line never can.
+   */
+  const graph = parse(`E:07 is lit.
+REASON: Intake opening covered by utensils.
+REMEDY: Arrange utensils so that the intake opening is not obstructed.
+E:22 is lit.
+REASON: Check the door seal for damage.
+REMEDY: Clean filters.`, 'Bosch manual p39');
+
+  assert.deepEqual(Object.keys(graph.codes).sort(), ['E07', 'E22']);
+  assert.equal(graph.codes.E07.causes[0].label, 'Intake opening covered by utensils');
+  assert.match(graph.codes.E07.causes[0].remedy, /^Arrange utensils/, 'the REMEDY: prefix survived into the remedy');
+
+  // The row that would fool a verb-based guess: a reason that reads like a remedy.
+  assert.equal(graph.codes.E22.causes[0].label, 'Check the door seal for damage',
+    'a labelled REASON was mistaken for a remedy');
+});
+
+it('"is lit" is not a fault description', () => {
+  // "E:07 is lit." parses cleanly and hands back the meaning "is lit.", which tells a reader
+  // nothing and looks like a bug. The page states no meaning for these codes; the causes carry it.
+  const graph = parse('E:07 is lit.\nREASON: Filters blocked.\nREMEDY: Clean filters.', 'm');
+  assert.equal(graph.codes.E07.meaning, '', 'a meaningless meaning was kept');
+  assert.equal(graph.codes.E07.causes.length, 1, 'dropping the meaning cost us the causes');
+
+  // And a real meaning still survives.
+  const real = parse('E24  Water cannot leave the machine\nCheck the drain filter.', 'm');
+  assert.equal(real.codes.E24.meaning, 'Water cannot leave the machine');
+});
+
 it('a reason with no remedy under it is not invented into a cause', () => {
   // A dangling reason has nothing to do about it, and a cause you cannot act on is noise.
   const graph = parse('Fault code E31 is lit.\nSomething is wrong and the manual does not say what.\n', 'm');
