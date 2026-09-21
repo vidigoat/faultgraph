@@ -300,6 +300,10 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 - **`readSymptoms` needs a column header** to find the boundary. Guessing it from whitespace finds
   one in ordinary prose too, and produced confident nonsense out of a safety page. No header, no
   parse.
+- **Explanation inside a procedure is a heuristic.** A cause with numbered steps prints sentences
+  flush with the column boundary between them — what happens next, how long it takes — and those
+  are attached to the step above rather than read as new causes. It works because a procedure's
+  later lines are indented continuations; a layout without them would confuse it.
 - **It does not catch every column collision.** Where the columns collide part-way down a symptom
   rather than on its first line, the rest survives and the cause comes out truncated — beginning
   mid-sentence. Obvious to a person reading it beside the page; invisible to this.
@@ -313,7 +317,7 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 13 for symptom tables and 7 that check this README
+npm test      # 52 checks, no network — plus 15 for symptom tables and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

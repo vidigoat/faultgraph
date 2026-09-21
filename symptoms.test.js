@@ -159,6 +159,54 @@ it('a numbered step is a remedy wherever it is printed', () => {
   assert.ok(!/^\d\./.test(s.causes[0].remedies[0]), 'the step number was kept as content');
 });
 
+/* ── explanation is not a cause ───────────────────────────────────────────── */
+
+/*
+ * Real, from SHE43DM2N page 40. A cause with an ordered procedure under it prints sentences flush
+ * with the boundary BETWEEN its numbered steps — what happens next, how long it takes — and the
+ * indent rule read every one of them as a new cause.
+ */
+const PROCEDURE = [
+  'Fault                  Cause and troubleshooting',
+  'All LEDs light up or   A software update is possibly installing.',
+  'flash.                 1. Wait until the software update has been installed.',
+  '                       This process can take approx. 30 minutes.',
+  '                       2. If the appliance is not ready to use after 30 minutes,',
+  '                          perform a reset.',
+  '                          Press the main switch button for approx. 4 seconds.',
+  '                          Your appliance is resetting.',
+  '                       Electronics have detected a fault.',
+  '                       1. Press the main switch button for approx. 4 seconds.',
+  '                       The appliance is reset and restarted.',
+  '                       2. If the problem occurs again:',
+  '                          Contact customer service.',
+].join('\n');
+
+it('a line between two numbered steps is explanation, not a new cause', () => {
+  /*
+   * The manual lists TWO causes here. This produced four — the extra pair being "This process can
+   * take approx. 30 minutes." and "The appliance is reset and restarted." An owner told either of
+   * those is a cause of their fault is worse off than one told nothing.
+   *
+   * Across twelve real manuals this removed 18 false causes and changed no symptom.
+   */
+  const [s] = readSymptoms({ text: PROCEDURE, sourceName: 'Bosch manual' }).symptoms;
+  assert.equal(s.causes.length, 2, 'explanatory lines were promoted to causes');
+  assert.deepEqual(
+    s.causes.map((c) => c.label),
+    ['A software update is possibly installing.', 'Electronics have detected a fault.']
+  );
+});
+
+it('after an ordinary remedy, a flush line IS the next cause', () => {
+  /*
+   * The rule only fires after a NUMBERED step, which is what marks a cause as having an ordered
+   * procedure. Widening it would merge every cause on every dishwasher page into the one above.
+   */
+  const [s] = readSymptoms({ text: PAGE, sourceName: 'Bosch manual' }).symptoms;
+  assert.equal(s.causes.length, 3, 'unnumbered remedies started swallowing the causes after them');
+});
+
 /* ── honesty ──────────────────────────────────────────────────────────────── */
 
 it('every cause cites where it came from', () => {

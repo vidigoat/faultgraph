@@ -204,6 +204,38 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      */
     const numbered = /^\d+\.\s/.test(right);
 
+    /*
+     * A line flush with the boundary, sitting between two NUMBERED steps of the same cause, is
+     * explanation — not a new cause.
+     *
+     *   Electronics have detected a fault.          <- cause
+     *   1. Press the main switch for 4 seconds.     <- step
+     *   The appliance is reset and restarted.       <- what happens next, printed flush
+     *   2. If the problem occurs again:             <- step
+     *
+     * The indent rule read those middle lines as causes, so "All LEDs light up or flash" came out
+     * with four causes where the manual has two — and the extra pair were "This process can take
+     * approx. 30 minutes." and "The appliance is reset and restarted." An owner told either of
+     * those is a CAUSE of their fault is worse off than one told nothing.
+     *
+     * Only after a numbered step, because that is what marks a cause as having an ordered procedure
+     * underneath it. After an ordinary unnumbered remedy, a flush line is the next cause — which is
+     * how the foam rows on every dishwasher page read.
+     *
+     * It is a heuristic and it leans on layout: the NEXT cause is reachable because a procedure's
+     * later lines are indented continuations, which put `lastKind` back to `remedy` before the
+     * cause arrives. Compress a fixture by dropping those continuation lines and this rule will
+     * swallow the cause after them. Nothing in the text distinguishes "This process can take approx.
+     * 30 minutes." from "Electronics have detected a fault." except where they sit, so a fixture
+     * for this has to be the real page rather than a tidy version of it.
+     */
+    const midProcedure = lastKind === 'step' && indent === 0 && !numbered;
+    if (midProcedure) {
+      const last = cause && cause.remedies[cause.remedies.length - 1];
+      if (last) last.text = joinWrapped(last.text, right);
+      continue;
+    }
+
     if (indent === 0 && !numbered) {
       /*
        * Flush with the boundary. A new cause — unless the previous right-column line was also a
@@ -233,7 +265,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
       } else {
         cause.remedies.push({ text: step, line: i });
       }
-      lastKind = 'remedy';
+      lastKind = numbered ? 'step' : 'remedy';
     }
   }
 
