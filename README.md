@@ -261,7 +261,7 @@ number that happens to look like a code is not a fault entry.
 ## Tests
 
 ```bash
-npm test      # 45 checks, no network — plus 7 that check this README against the code
+npm test      # 50 checks, no network — plus 7 that check this README against the code
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
@@ -270,6 +270,27 @@ a contradiction is reported rather than swallowed.
 
 One test walks **every sequence of answers on every code in every fixture** and asserts each one
 terminates — a loop there is not a slow run, it is a person being asked the same question forever.
+
+### What a real manual did to it
+
+Three fixtures written from imagination all parsed on the first try. The first **real** service
+manual — a Bosch dishwasher, from Bosch's own CDN — recovered **nothing**, for two reasons no
+fixture had:
+
+- **The codes are not at the start of the line.** The page says *"Fault code E24 is lit."* — a
+  three-column table (Fault | Reason | Remedial action) turns into a sentence when it is read
+  aloud, and the code lands in the middle of it. Every pattern here anchored to the line start.
+- **Only the action lines carry a verb.** The reasons — *"Waste-water hose kinked or blocked"* —
+  have none, so they were discarded, and a cause was derived back out of the remedy instead. That
+  works, and it is strictly worse than reading the reason the manufacturer printed. Their sentence
+  beats our guess at their sentence.
+
+Both are handled, and the manufacturer's stated reason now wins wherever the page gives one.
+
+There is a third thing a real manual does that this library cannot fix: the fault codes are set in
+a seven-segment display face, so `E:24` extracts from the PDF text layer as `“:‹ˆ`. The text is not
+wrong about the *page*; it is wrong about the *codes*. That is an argument for reading a rendered
+image rather than a text layer, and it belongs to whatever is feeding this library — not here.
 
 ### Two bugs these tests found
 

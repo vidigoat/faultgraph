@@ -228,6 +228,82 @@ it('a remedy belonging to the next code does not attach to this one', () => {
   assert.ok(!e24.includes('door seal'), "E15's remedy was filed under E24");
 });
 
+/* ── The shapes real manuals actually use ────────────────────────────────── */
+
+group('real manuals, not fixtures');
+
+/*
+ * Everything in this section came from one real Bosch dishwasher manual, downloaded from Bosch's
+ * own CDN. Three fixtures written from imagination all parsed on the first try; the real document
+ * recovered NOTHING, for two reasons neither fixture had.
+ */
+
+const BOSCH_REAL = `FAULT CODE TABLE
+
+Fault code E24 is lit.
+Waste-water hose kinked or blocked.
+Install hose without kinks, remove any residue.
+Siphon connection still sealed.
+Check connection to siphon and open if required.
+Cover on the waste water pump loose.
+Lock cover correctly.
+
+Fault code E25 is lit.
+Waste water pump blocked or cover not locked in position.
+Clean pump and lock cover correctly.
+`;
+
+it('a code embedded in a sentence is still a code', () => {
+  /*
+   * "Fault code E24 is lit." — the code in the middle of a line rather than at the start of one.
+   * Every other pattern here anchors to the line start, so this format recovered nothing at all.
+   * It is what a three-column table becomes when it is read aloud: the first column turns into a
+   * sentence and the code lands inside it.
+   */
+  const graph = parse(BOSCH_REAL, 'Bosch service manual');
+  assert.deepEqual(Object.keys(graph.codes).sort(), ['E24', 'E25']);
+  assert.equal(graph.found, 2);
+});
+
+it("the manufacturer's stated reason is preferred to our derived one", () => {
+  /*
+   * The second real-world gap. Only the ACTION lines carry a remedy verb, so an earlier version
+   * kept those and threw the reasons away, then derived a cause back out of the remedy.
+   *
+   * "Waste-water hose kinked or blocked" is Bosch's sentence. "Hose has failed" is our guess at
+   * Bosch's sentence. When the page prints the reason, printing our guess instead is strictly
+   * worse and harder to defend.
+   */
+  const graph = parse(BOSCH_REAL, 'Bosch service manual');
+  const labels = graph.codes.E24.causes.map((c) => c.label);
+  assert.ok(labels.includes('Waste-water hose kinked or blocked'), `derived instead of read: ${labels}`);
+  assert.ok(labels.includes('Siphon connection still sealed'));
+});
+
+it('a reason with no remedy under it is not invented into a cause', () => {
+  // A dangling reason has nothing to do about it, and a cause you cannot act on is noise.
+  const graph = parse('Fault code E31 is lit.\nSomething is wrong and the manual does not say what.\n', 'm');
+  assert.deepEqual(graph.codes, {}, 'a reason with no remedy became a cause');
+});
+
+it('several reason/action pairs under one code all survive', () => {
+  // The window used to be five lines, sized for a short fixture. A real table runs longer and was
+  // being truncated at the third cause.
+  const graph = parse(BOSCH_REAL, 'm');
+  assert.ok(graph.codes.E24.causes.length >= 3, `only ${graph.codes.E24.causes.length} causes recovered`);
+});
+
+it('every cause still cites a line that holds its remedy', () => {
+  // The new path must not break the property the whole library rests on.
+  const lines = BOSCH_REAL.split('\n');
+  const graph = parse(BOSCH_REAL, 'Bosch service manual');
+  for (const entry of Object.values(graph.codes)) {
+    for (const cause of entry.causes) {
+      assert.equal(lines[cause.source.line - 1].trim(), cause.remedy);
+    }
+  }
+});
+
 /* ── Remedies into causes ──────────────────────────────────────────────────── */
 
 group('remedies into causes');
