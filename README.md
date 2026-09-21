@@ -332,7 +332,7 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 26 for symptom tables and 7 that check this README
+npm test      # 52 checks, no network — plus 27 for symptom tables and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

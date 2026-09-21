@@ -22,6 +22,12 @@ const HEADER = /^(\s*)(?:Fault|Problem|Symptom)\s{2,}(Cause and troubleshooting|
 /** `21.1 Disposal of your old appliance` — the manual has moved on to another section. */
 const SECTION_HEADING = /^\s*\d{1,2}\.\d{1,2}\s+[A-Z]/;
 
+/*
+ * A run of spaces inside a symptom is a column gap that survived the split. No symptom a manual
+ * prints contains three spaces, so collapsing is a repair rather than a tidy-up.
+ */
+const tidy = (t) => String(t).replace(/\s{3,}\S*\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+
 /** A page number stranded mid-table by a page break. No manual prints a symptom that is only digits. */
 const PAGE_NUMBER = /^\s*\d{1,4}\s*$/;
 
@@ -400,15 +406,49 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    * Merged only when they are ADJACENT and identical. A manual that genuinely lists the same
    * symptom twice in different places is telling you something, and this must not flatten that.
    */
-  for (let k = symptoms.length - 1; k > 0; k--) {
-    if (symptoms[k].symptom === symptoms[k - 1].symptom) {
-      symptoms[k - 1].causes.push(...symptoms[k].causes);
-      symptoms.splice(k, 1);
-    }
-  }
+  /*
+   * Compared AFTER tidying, which is where this quietly stopped working.
+   *
+   * The merge ran on the raw joined text and the tidy ran later, so two halves of one symptom that
+   * differed only by a stray column-gap fragment never matched — and "All LEDs light up or flash."
+   * came back twice on five machines, the second with a cause carrying no label at all.
+   */
+  for (const s of symptoms) s.symptom = tidy(s.symptom);
 
+  /*
+   * Dropped first, THEN merged — and getting that order wrong left the bug half-fixed.
+   *
+   * A row the parser could see the left of and not the right of sits between the two halves of a
+   * split symptom. Merging before dropping it means the halves are not adjacent and never match;
+   * dropping first puts them next to each other, which is where they were on the page.
+   */
+  const dropped = symptoms.filter((s) => !s.causes.length).length + collided;
   const usable = symptoms.filter((s) => s.causes.length);
-  const dropped = symptoms.length - usable.length + collided;
+
+  for (let k = usable.length - 1; k > 0; k--) {
+    if (usable[k].symptom !== usable[k - 1].symptom) continue;
+
+    const before = usable[k - 1].causes;
+    const after = [...usable[k].causes];
+
+    /*
+     * The seam falls inside a cause, not between two of them.
+     *
+     * A procedure that runs past the bottom of a page carries on at the top of the next one with
+     * its steps and without its cause — the cause was printed once, back on the first page. Joined
+     * naively that became a second cause with no label at all, sitting under the symptom as though
+     * the manual had listed a reason and left it blank.
+     *
+     * It is the same cause. Its steps belong to the last one of the half above.
+     */
+    if (after.length && !after[0].label && before.length) {
+      before[before.length - 1].remedies.push(...(after[0].remedies || []));
+      after.shift();
+    }
+
+    before.push(...after);
+    usable.splice(k, 1);
+  }
 
   /*
    * A run of spaces inside a symptom is a column gap that survived the split — the boundary landed
@@ -416,7 +456,6 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    * the        A display." is one symptom's worth of left column with a stray "A" from the next.
    * Collapsing is a repair, not a tidy-up: no symptom a manual prints contains three spaces.
    */
-  const tidy = (t) => String(t).replace(/\s{3,}\S*\s*$/, '').replace(/\s{2,}/g, ' ').trim();
 
   /*
    * A row the parser could not read cleanly, saying so.
@@ -433,9 +472,9 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
   const out = usable.map((s) => ({
     // A stable handle for the row, so a reviewer can accept or reject this symptom by name. The
     // symptom text itself is a sentence and makes a poor key.
-    id: slug(tidy(s.symptom)),
-    symptom: tidy(s.symptom),
-    suspect: looksTruncated(tidy(s.symptom)) || undefined,
+    id: slug(s.symptom),
+    symptom: s.symptom,
+    suspect: looksTruncated(s.symptom) || undefined,
     causes: s.causes.map((c, k) => ({
       id: `${slug(s.symptom)}-${k}`,
       label: c.label,

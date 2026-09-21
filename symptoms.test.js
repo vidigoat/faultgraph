@@ -248,6 +248,30 @@ it('one symptom printed twice across a page break is one symptom', () => {
   assert.equal(r.symptoms[0].causes.length, 2, 'the causes from the two halves were not joined');
 });
 
+it('a procedure split by the seam is one cause, not a cause with no reason', () => {
+  /*
+   * A procedure that runs past the bottom of a page carries on at the top of the next one with its
+   * steps and without its cause — the cause was printed once, back on the first page. Joined
+   * naively that became a second cause with no label, sitting under the symptom as though the
+   * manual had listed a reason and left it blank. One on every machine with a multi-page table.
+   */
+  const page = [
+    'Fault                  Cause and troubleshooting',
+    'All LEDs light up or   Electronics have detected a fault.',
+    'flash.                 1. Press the main switch for 4 seconds.',
+    '48',
+    'Fault                  Cause and troubleshooting',
+    'All LEDs light up or      2. If the problem occurs again:',
+    'flash.                       Contact customer service.',
+  ].join('\n');
+
+  const r = readSymptoms({ text: page, sourceName: 'Bosch manual' });
+  assert.equal(r.symptoms.length, 1);
+  assert.equal(r.symptoms[0].causes.length, 1, 'the continuation became a cause of its own');
+  assert.equal(r.symptoms[0].causes[0].label, 'Electronics have detected a fault.');
+  assert.ok(r.symptoms[0].causes[0].remedies.length >= 2, 'the steps after the seam were lost');
+});
+
 it('but a symptom that genuinely appears twice is not flattened', () => {
   // Merged only when ADJACENT. A manual listing the same symptom in two places is telling you
   // something, and this must not delete it.
