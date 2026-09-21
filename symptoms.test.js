@@ -352,6 +352,56 @@ it('after an ordinary remedy, a flush line IS the next cause', () => {
   assert.equal(s.causes.length, 3, 'unnumbered remedies started swallowing the causes after them');
 });
 
+/* ── where the table ends ─────────────────────────────────────────────────── */
+
+it('the page moving on to another section ends the table', () => {
+  /*
+   * Nothing told it to stop. On a Bosch washer the fault table finishes part-way down the page and
+   * the disposal section, a safety warning and the installation notes follow — and every one came
+   * back as a symptom: "21.1 Disposal of your old appliance...", "WARNING Children can lock
+   * themselves in the appliance". Seven of that machine's eight symptoms were not symptoms.
+   */
+  const page = [
+    'Fault                  Cause and troubleshooting',
+    'Door will not close.   The lock is engaged.',
+    '                          Release it.',
+    '21.1 Disposal of your old appliance',
+    'Environmentally compatible disposal allows valuable raw materials to be recycled.',
+  ].join('\n');
+
+  const r = readSymptoms({ text: page, sourceName: 'Bosch manual' });
+  assert.equal(r.symptoms.length, 1);
+  assert.equal(r.symptoms[0].symptom, 'Door will not close.');
+});
+
+it('two full-width lines in a row end it too', () => {
+  const page = [
+    'Fault                  Cause and troubleshooting',
+    'Door will not close.   The lock is engaged.',
+    '                          Release it.',
+    'Children can lock themselves in the appliance, thereby putting their lives at risk.',
+    'The appliance must not be set up behind a lockable door or a sliding door of any kind.',
+  ].join('\n');
+
+  assert.equal(readSymptoms({ text: page, sourceName: 'x' }).symptoms.length, 1);
+});
+
+it('but ONE gapless line does not, because a collided row has no gap either', () => {
+  // Requiring two consecutive lines is what keeps this from eating the rows the parser is meant to
+  // notice and refuse.
+  const page = [
+    'Fault' + ' '.repeat(20) + 'Cause and troubleshooting',
+    'Home Connect cannot There is a technical error.',
+    'be implemented cor-' + ' '.repeat(9) + 'Please consult the documents supplied.',
+    'rectly.',
+    'Door will not close.' + ' '.repeat(6) + 'The lock is engaged.',
+    ' '.repeat(28) + 'Release it.',
+  ].join('\n');
+
+  const names = readSymptoms({ text: page, sourceName: 'x' }).symptoms.map((s) => s.symptom);
+  assert.ok(names.includes('Door will not close.'), 'the table was cut short at a collided row');
+});
+
 /* ── honesty ──────────────────────────────────────────────────────────────── */
 
 it('every cause cites where it came from', () => {

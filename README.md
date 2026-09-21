@@ -308,6 +308,10 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
   the top of the next one, and two ADJACENT identical symptoms are merged back into one — but two
   non-adjacent ones are left alone, because a manual listing the same symptom in two places is
   telling you something. Anything else a manual prints in its margins is not handled.
+- **It stops where the table stops**, on a numbered section heading or two consecutive full-width
+  lines — because prose has no column gap and a table row always does. One gapless line is not
+  enough: a collided row has no gap either, and those are worth noticing rather than cutting the
+  table short at.
 - **Explanation inside a procedure is a heuristic.** A cause with numbered steps prints sentences
   flush with the column boundary between them — what happens next, how long it takes — and those
   are attached to the step above rather than read as new causes. It works because a procedure's
@@ -328,7 +332,7 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 23 for symptom tables and 7 that check this README
+npm test      # 52 checks, no network — plus 26 for symptom tables and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

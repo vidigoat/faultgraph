@@ -19,6 +19,9 @@
 /** The two headings these tables use. The capture is what fixes the column boundary. */
 const HEADER = /^(\s*)(?:Fault|Problem|Symptom)\s{2,}(Cause and troubleshooting|Cause and remedy|Cause\b.*)$/im;
 
+/** `21.1 Disposal of your old appliance` — the manual has moved on to another section. */
+const SECTION_HEADING = /^\s*\d{1,2}\.\d{1,2}\s+[A-Z]/;
+
 /** A page number stranded mid-table by a page break. No manual prints a symptom that is only digits. */
 const PAGE_NUMBER = /^\s*\d{1,4}\s*$/;
 
@@ -97,6 +100,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
   let leftWasBlank = true;
   let collided = 0;   // rows whose two columns run together and cannot be split
   let skipping = false; // inside a symptom whose first row collided, so none of it can be trusted
+  let prose = 0;      // consecutive full-width lines: the page has moved past the table
   let lastLeft = null;  // the previous line's left column, for deciding where a skipped symptom ends
 
   for (let i = boundary.line + 1; i < lines.length; i++) {
@@ -113,6 +117,25 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * A bare number is a page number — no manual prints a symptom that is only digits — and a
      * repeat of the header line is the table introducing itself again on the next page.
      */
+    /*
+     * Where the table ENDS.
+     *
+     * Nothing told it to stop. On a Bosch washer the fault table finishes part-way down the page
+     * and the disposal section, a safety warning and the installation notes follow — and every one
+     * of them came back as a symptom: "21.1 Disposal of your old appliance...", "WARNING Children
+     * can lock themselves in the appliance". Seven of that machine's eight symptoms were not
+     * symptoms.
+     *
+     * A table row always has a column gap, because column one is padded out to the boundary. Prose
+     * does not. So a long line with no gap in it is the page having moved on — long, because a
+     * COLLIDED row has no gap either and those are worth keeping and are never this long.
+     */
+    if (SECTION_HEADING.test(raw)) break;
+    // Two in a row, not one. A COLLIDED table row also has no gap in it, and those are worth
+    // keeping — one long gapless line proves nothing, two consecutive ones are prose.
+    prose = !/\s{2,}\S/.test(raw.trim()) && raw.trim().length > at + 40 ? prose + 1 : 0;
+    if (prose >= 2) break;
+
     if (PAGE_NUMBER.test(raw) || HEADER.test(raw)) {
       /*
        * A repeated header is also where the columns MOVE.
