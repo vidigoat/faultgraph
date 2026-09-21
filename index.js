@@ -703,8 +703,12 @@ function prune({ space, outcome }) {
   return { space: nextSpace, eliminated, contradiction: false, bits: entropy(nextSpace) };
 }
 
+const { readSymptoms, columnBoundary } = require('./symptoms');
+
 module.exports = {
   parse, merge, spaceFor, next, prune, entropy, normalise, score, expectedEntropyAfter, EFFORT,
+  // Tables keyed on a described symptom rather than a code — which is what manufacturers print now.
+  readSymptoms, columnBoundary,
   // The pieces, exported because a manual you have never seen may need one of them adjusted.
   matchCodeLine, joinOrphanCodes, observationsFrom, conjugate,
   effortOf, isMains, remedyToCause, normaliseCode, CONDITION, CODE_LINE, CODE_PATTERNS, NOT_A_CODE,

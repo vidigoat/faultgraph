@@ -241,6 +241,52 @@ number that happens to look like a code is not a fault entry.
 
 ---
 
+### `readSymptoms({ text, sourceName?, page? })`
+
+Reads a troubleshooting table keyed on a **described symptom** rather than a fault code.
+
+Not every manual prints codes. Measured across ten *current* Bosch US dishwasher manuals fetched
+from the manufacturer's own site: **zero fault codes between them**, and ten to thirteen pages each
+of `Fault | Cause and troubleshooting` whose left column is a sentence. A 2019 European manual for
+the same kind of machine has ten code mentions. So for a lot of equipment this is not a fallback,
+it is the only door.
+
+```
+Fault                  Cause and troubleshooting
+Excessive formation of Rinse aid has been spilled.
+foam occurs.              Remove the rinse aid with a cloth.
+                       Detergent used causes excessive foaming.
+                          Change the brand of detergent.
+```
+
+```js
+{
+  found: 1,
+  boundary: 23,
+  coverage: '1 symptom recovered',
+  symptoms: [{
+    id: 'excessive-formation-of-foam-occurs',
+    symptom: 'Excessive formation of foam occurs.',
+    causes: [
+      { label: 'Rinse aid has been spilled.', remedies: ['Remove the rinse aid with a cloth.'], cost: null, likelihood: 0.625 },
+      { label: 'Detergent used causes excessive foaming.', remedies: ['Change the brand of detergent.'], cost: null, likelihood: 0.385 },
+    ],
+  }],
+}
+```
+
+**The column boundary comes from the page's own header**, not a constant — it is 23 in one manual
+and 26 in another. Within column two, **indent is the grammar**: flush with the boundary is a cause,
+indented past it is a remedy under that cause. Which is why `pdftotext -layout` is required, and
+why a de-layouted extraction destroys it.
+
+**What it refuses is the part worth knowing about.** Some rows have columns that have collided — the
+left column ran long and the typesetter squeezed the gap to a single space, so
+`Home Connect cannot Home Connect set incorrectly.` could break before the second "Home" or after
+it, with nothing in the text to say which. Backing off to the nearest space gives the symptom
+*"Home Connect cannot Home"* and the cause *"Connect set incorrectly."* — wrong in a way that looks
+right. Those rows are skipped, along with the rest of the symptom they belong to, and counted.
+
 ## What it will not do, honestly
 
 - **It does not read PDFs or images.** Give it text. Extraction is somebody else's job, and keeping
@@ -251,6 +297,12 @@ number that happens to look like a code is not a fault entry.
   *right* of the code rather than below it. Both would need layout information this does not have —
   but it recognises the second case and says so rather than claiming the page was empty.
 - **It does not do multi-code faults.** One code, one hypothesis space.
+- **`readSymptoms` needs a column header** to find the boundary. Guessing it from whitespace finds
+  one in ordinary prose too, and produced confident nonsense out of a safety page. No header, no
+  parse.
+- **It does not catch every column collision.** Where the columns collide part-way down a symptom
+  rather than on its first line, the rest survives and the cause comes out truncated — beginning
+  mid-sentence. Obvious to a person reading it beside the page; invisible to this.
 - **The priors are ordinal, not measured.** `1/(k + 1.6)` turns rank into a number. It encodes "the
   manufacturer listed this first" and nothing more; it is not a failure rate.
 - **`conjugate()` is a heuristic** for English verbs, used so a spoken answer reads as
@@ -261,7 +313,7 @@ number that happens to look like a code is not a fault entry.
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 7 that check this README against the code
+npm test      # 52 checks, no network — plus 13 for symptom tables and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

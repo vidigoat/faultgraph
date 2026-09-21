@@ -1,12 +1,13 @@
 {
   "name": "faultgraph",
   "version": "1.0.0",
-  "description": "Read the fault-code table out of an equipment service manual and turn it into a diagnosable graph. Zero dependencies.",
+  "description": "Read the troubleshooting table out of an equipment service manual \u2014 keyed on a fault code or on a described symptom \u2014 and turn it into a diagnosable graph. Zero dependencies.",
   "license": "MIT",
   "type": "commonjs",
   "main": "index.js",
   "files": [
     "index.js",
+    "symptoms.js",
     "README.md",
     "LICENSE"
   ],
@@ -14,7 +15,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test.js && node docs.test.js",
+    "test": "node test.js && node symptoms.test.js && node docs.test.js",
     "example": "node examples/diagnose.js"
   },
   "keywords": [
