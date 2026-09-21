@@ -314,7 +314,10 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
   later lines are indented continuations; a layout without them would confuse it.
 - **It does not catch every column collision.** Where the columns collide part-way down a symptom
   rather than on its first line, the rest survives and the cause comes out truncated — beginning
-  mid-sentence. Obvious to a person reading it beside the page; invisible to this.
+  mid-sentence. It cannot be repaired from the text, but it IS detectable: a cause that begins in
+  lower case is flagged `suspect: true`, because a manual does not start a sentence that way. Four
+  rows across twelve real manuals. The library cannot fix them and does not pretend to; it points
+  at them, which is the difference between a question and a fact.
 - **The priors are ordinal, not measured.** `1/(k + 1.6)` turns rank into a number. It encodes "the
   manufacturer listed this first" and nothing more; it is not a failure rate.
 - **`conjugate()` is a heuristic** for English verbs, used so a spoken answer reads as

@@ -395,14 +395,30 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    */
   const tidy = (t) => String(t).replace(/\s{3,}\S*\s*$/, '').replace(/\s{2,}/g, ' ').trim();
 
+  /*
+   * A row the parser could not read cleanly, saying so.
+   *
+   * Four rows across twelve real manuals still come out truncated — a cause beginning mid-sentence
+   * because the columns collided part-way down its symptom, which nothing in the text layer can
+   * recover. They cannot be fixed here. They CAN be pointed at.
+   *
+   * That is the whole difference between this and guessing: a flagged row sits in front of a
+   * reviewer looking like a question, and an unflagged one sits in a library looking like a fact.
+   */
+  const looksTruncated = (t) => Boolean(t) && /^[a-z]/.test(String(t).trim());
+
   const out = usable.map((s) => ({
     // A stable handle for the row, so a reviewer can accept or reject this symptom by name. The
     // symptom text itself is a sentence and makes a poor key.
     id: slug(tidy(s.symptom)),
     symptom: tidy(s.symptom),
+    suspect: looksTruncated(tidy(s.symptom)) || undefined,
     causes: s.causes.map((c, k) => ({
       id: `${slug(s.symptom)}-${k}`,
       label: c.label,
+      // Begins mid-sentence, so the start of it was lost to a column collision. Not repairable
+      // here; flagged so a reviewer's eye goes to it.
+      suspect: looksTruncated(c.label) || undefined,
       // The manual's ordering is the prior: the first cause listed is the commonest.
       likelihood: Number((1 / (k + 1.6)).toFixed(3)),
       // A manual lists remedies, never prices. Null, not zero — zero would mean free.
