@@ -254,6 +254,30 @@ it('a line between two numbered steps is explanation, not a new cause', () => {
   );
 });
 
+it('a flush line followed by an INDENTED one is the next cause, not explanation', () => {
+  /*
+   * The other half, and the rule that stopped explanations becoming causes started swallowing
+   * causes into remedies without it — one silent error traded for another.
+   *
+   * Both lines look identical on their own. The layout decides it one line ahead: an explanation
+   * sits between two steps of one procedure, so what follows it is flush; a cause is followed by
+   * its own remedies, so what follows it is indented.
+   */
+  const page = [
+    'Fault                      Cause and troubleshooting',
+    'Water is left in the ap-   Filter system or area under the filters is blocked.',
+    'pliance at the end of      1. Clean the Filters.',
+    'the program.               2. Clean the Drain pump.',
+    '                           Program has not yet ended.',
+    '                              Wait until the program ends.',
+  ].join('\n');
+
+  const [s] = readSymptoms({ text: page, sourceName: 'Bosch manual' }).symptoms;
+  assert.equal(s.causes.length, 2, 'the second cause was swallowed into the first cause\'s steps');
+  assert.equal(s.causes[1].label, 'Program has not yet ended.');
+  assert.deepEqual(s.causes[1].remedies, ['Wait until the program ends.']);
+});
+
 it('after an ordinary remedy, a flush line IS the next cause', () => {
   /*
    * The rule only fires after a NUMBERED step, which is what marks a cause as having an ordered

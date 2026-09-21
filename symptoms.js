@@ -266,7 +266,39 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * 30 minutes." from "Electronics have detected a fault." except where they sit, so a fixture
      * for this has to be the real page rather than a tidy version of it.
      */
-    const midProcedure = lastKind === 'step' && indent === 0 && !numbered;
+    /*
+     * Which flush line after a numbered step is explanation, and which is the next cause.
+     *
+     * Both look identical on their own line. The layout decides it, one line ahead:
+     *
+     *   1. Wait until the software update has been installed.
+     *   This process can take approx. 30 minutes.      <- explanation
+     *   2. If the appliance is not ready to use...      <- the sequence continues, FLUSH
+     *
+     *   2. Clean the Drain pump.
+     *   Program has not yet ended.                      <- a new cause
+     *      Wait until the program ends...               <- its remedy, INDENTED
+     *
+     * An explanation sits between two steps of one procedure, so the line after it is flush. A
+     * cause is followed by its own remedies, so the line after it is indented. Without this, the
+     * rule that stopped explanations becoming causes started swallowing causes into remedies —
+     * trading one silent error for another.
+     */
+    const lookahead = (() => {
+      for (let j = i + 1; j < lines.length; j++) {
+        const nxt = lines[j];
+        if (!nxt.trim()) continue;
+        const cut2 = splitAt(nxt, at);
+        if (cut2 === null) return null;
+        const r = nxt.slice(cut2);
+        if (!r.trim()) return null;
+        return Math.max(0, (r.length - r.trimStart().length) - (at - cut2));
+      }
+      return null;
+    })();
+
+    const midProcedure =
+      lastKind === 'step' && indent === 0 && !numbered && lookahead === 0;
     if (midProcedure) {
       const last = cause && cause.remedies[cause.remedies.length - 1];
       if (last) last.text = joinWrapped(last.text, right);
