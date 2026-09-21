@@ -122,6 +122,32 @@ it('two symptoms on consecutive lines stay two symptoms', () => {
   assert.equal(b.symptom, 'WLAN display is flashing.');
 });
 
+it('a split one word inside the right column is handed back', () => {
+  /*
+   * Real, both rows, from SGV78C53UC pages 48-49. The split lands on a space that LOOKS like the
+   * column gap and is not, giving the symptom "Home Connect cannot There" and the cause "is a
+   * technical error."
+   *
+   * The signal is precise: a cause beginning with a lowercase word. Manuals do not start a sentence
+   * in lower case, so when the left column's last word is capitalised and the right begins lower,
+   * the word belongs to the right. That is a repair, not a guess — and note the difference from the
+   * collided rows below, where nothing in the text says where the break belongs and the row is
+   * refused instead.
+   */
+  // Column two at 25, which is where this manual sets it — and which is what makes the split land
+  // on the space before "is" rather than inside a word. A tidier fixture does not reproduce it.
+  const page = [
+    'Fault' + ' '.repeat(20) + 'Cause and troubleshooting',
+    'Home Connect cannot There is a technical error.',
+    'be implemented cor-' + ' '.repeat(9) + 'Please consult the documents supplied.',
+    'rectly.',
+  ].join('\n');
+
+  const [s] = readSymptoms({ text: page, sourceName: 'Bosch manual' }).symptoms;
+  assert.equal(s.symptom, 'Home Connect cannot be implemented correctly.');
+  assert.equal(s.causes[0].label, 'There is a technical error.');
+});
+
 it('a row whose columns have collided is refused, not guessed at', () => {
   /*
    * This assertion replaced one that claimed the row was recoverable, because it is not, and the

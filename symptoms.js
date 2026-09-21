@@ -151,7 +151,30 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * because a mangled symptom on screen is worse than an absent one — a reviewer can reject a
      * row they can see, and cannot repair the words in it.
      */
-    const cut = splitAt(raw, at);
+    let cut = splitAt(raw, at);
+
+    /*
+     * A split that landed one word inside the right column.
+     *
+     * `Home Connect cannot There is a technical error.` splits at a space that LOOKS like the
+     * column gap and is not, giving the symptom "Home Connect cannot There" and the cause "is a
+     * technical error." Same shape on another row: "Wash cycle starts up You" / "did not wait
+     * until the cycle ended."
+     *
+     * The signal is precise: a cause that begins with a lowercase word. Manuals do not start a
+     * sentence in lower case. So when the left column's last word is capitalised and the right
+     * begins lower, the word is handed back — and the guard is strict enough that a wrapped
+     * continuation, which is the other thing that begins lower, never reaches here as a cause.
+     */
+    if (cut !== null) {
+      const l = raw.slice(0, cut).trimEnd();
+      const r = raw.slice(cut).trimStart();
+      const lastWord = l.split(/\s+/).pop() || '';
+      if (/^[a-z]/.test(r) && /^[A-Z]/.test(lastWord) && l.split(/\s+/).length > 1) {
+        const back = l.lastIndexOf(lastWord);
+        if (back > 0) cut = back;
+      }
+    }
 
     /*
      * A collided row takes its whole symptom with it.
