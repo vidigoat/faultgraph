@@ -304,7 +304,10 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
   from its causes at the seam — and joining drops the first page's number and the second page's
   column header into the middle of the rows. Both are recognised and skipped, and the repeated
   header is also where the columns are **re-anchored**: each page is laid out on its own and
-  nothing says the two agree. Anything else a manual prints in its margins is not handled.
+  nothing says the two agree. A row that runs past the bottom of a page has its symptom repeated at
+  the top of the next one, and two ADJACENT identical symptoms are merged back into one — but two
+  non-adjacent ones are left alone, because a manual listing the same symptom in two places is
+  telling you something. Anything else a manual prints in its margins is not handled.
 - **Explanation inside a procedure is a heuristic.** A cause with numbered steps prints sentences
   flush with the column boundary between them — what happens next, how long it takes — and those
   are attached to the step above rather than read as new causes. It works because a procedure's
@@ -322,7 +325,7 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 20 for symptom tables and 7 that check this README
+npm test      # 52 checks, no network — plus 22 for symptom tables and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

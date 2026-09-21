@@ -200,6 +200,45 @@ it('and the real rows on both sides of the break survive', () => {
   assert.deepEqual(names, ['Appliance does not start.', 'Appliance door cannot be closed.']);
 });
 
+it('one symptom printed twice across a page break is one symptom', () => {
+  /*
+   * A row that runs past the bottom of a page has its symptom repeated in the left column at the
+   * top of the next one — the manual being helpful — and after the header reset it arrived as a
+   * second symptom with the same words and the leftovers of the first one's causes. On one machine
+   * that produced two entries called "All LEDs light up or flash.", the second with no cause at all.
+   */
+  const page = [
+    'Fault                  Cause and troubleshooting',
+    'All LEDs light up or   A software update is installing.',
+    'flash.                    Wait until it finishes.',
+    '48',
+    'Fault                  Cause and troubleshooting',
+    'All LEDs light up or   Electronics have detected a fault.',
+    'flash.                    Press the main switch for 4 seconds.',
+  ].join('\n');
+
+  const r = readSymptoms({ text: page, sourceName: 'Bosch manual' });
+  assert.equal(r.symptoms.length, 1, 'the same symptom came back twice');
+  assert.equal(r.symptoms[0].causes.length, 2, 'the causes from the two halves were not joined');
+});
+
+it('but a symptom that genuinely appears twice is not flattened', () => {
+  // Merged only when ADJACENT. A manual listing the same symptom in two places is telling you
+  // something, and this must not delete it.
+  const page = [
+    'Fault                  Cause and troubleshooting',
+    'Door will not close.   The lock is engaged.',
+    '                          Release it.',
+    'Water remains.         The filter is blocked.',
+    '                          Clean it.',
+    'Door will not close.   A rack is in the way.',
+    '                          Move the rack.',
+  ].join('\n');
+
+  const r = readSymptoms({ text: page, sourceName: 'Bosch manual' });
+  assert.equal(r.symptoms.length, 3, 'two non-adjacent mentions of one symptom were merged');
+});
+
 it('the columns are re-anchored where the header repeats', () => {
   /*
    * The worst of the three, because it was silent. Page 38 sets its table at one column and page 39

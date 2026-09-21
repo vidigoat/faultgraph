@@ -342,6 +342,25 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    * A symptom with no causes is a row we saw the left of and could not read the right of. Dropped,
    * and counted, so the coverage line is about what was recovered rather than what was noticed.
    */
+  /*
+   * One symptom, printed twice because the table crossed a page.
+   *
+   * A row that runs past the bottom of a page has its symptom repeated in the left column at the
+   * top of the next one — that is the manual being helpful — and after the header reset it arrived
+   * here as a second symptom with the same words and the leftovers of the first one's causes. On
+   * one machine that produced two entries called "All LEDs light up or flash.", the second with no
+   * cause at all.
+   *
+   * Merged only when they are ADJACENT and identical. A manual that genuinely lists the same
+   * symptom twice in different places is telling you something, and this must not flatten that.
+   */
+  for (let k = symptoms.length - 1; k > 0; k--) {
+    if (symptoms[k].symptom === symptoms[k - 1].symptom) {
+      symptoms[k - 1].causes.push(...symptoms[k].causes);
+      symptoms.splice(k, 1);
+    }
+  }
+
   const usable = symptoms.filter((s) => s.causes.length);
   const dropped = symptoms.length - usable.length + collided;
 
