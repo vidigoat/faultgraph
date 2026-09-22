@@ -472,4 +472,75 @@ it('empty input is empty, not a crash', () => {
   }
 });
 
+it('a symptom that runs over a line is not split by the full stop in the middle of it', () => {
+  /*
+   * From a Siemens oven, page 13. ONE symptom over three lines:
+   *
+   *     The appliance is switched on.        The operation indicator is defective.
+   *     The operation indicator does not        Call Customer Service Page 15.
+   *     light up.
+   *
+   * The first line ends in a full stop, and sentence punctuation is what tells a finished symptom
+   * from a wrapped one — so line two started a NEW symptom, which came back with no causes at all,
+   * while the cause that belonged to it stayed attached to the half above.
+   *
+   * A new symptom always begins a new cause. A line whose right column is a remedy, indented under
+   * the cause above, cannot be the start of one.
+   */
+  const page = [
+    'Fault' + ' '.repeat(30) + 'Cause and troubleshooting',
+    'The appliance is switched on.' + ' '.repeat(6) + 'The operation indicator is defective.',
+    'The operation indicator does not' + ' '.repeat(6) + 'Call Customer Service Page 15.',
+    'light up.',
+    '',
+    'The front panel is not aligned.' + ' '.repeat(4) + 'The front panel was not aligned during installation.',
+  ].join('\n');
+
+  const out = readSymptoms({ text: page, sourceName: 'x' });
+  const names = out.symptoms.map((s) => s.symptom);
+
+  assert.equal(names.length, 2, `split into ${names.length}: ${names.join(' / ')}`);
+  assert.match(names[0], /switched on\. The operation indicator does not light up\./);
+  assert.equal(out.symptoms[0].causes.length, 1, 'the cause was orphaned from its symptom');
+  assert.equal(names[1], 'The front panel is not aligned.');
+});
+
+it('a bullet marks a remedy on a page where nothing is indented', () => {
+  /*
+   * From a Siemens oven, page 5. Its whole right column is flush with the boundary and every
+   * remedy is prefixed with ▶ instead:
+   *
+   *     The cookware or       There has been a power cut.
+   *     food is not heating   ▶ Check whether the lighting in your room is working.
+   *     up.
+   *                           The appliance is switched off.
+   *                           ▶ Switch the appliance on.
+   *
+   * With nothing indented, the indent rule read all four lines as one cause and glued them into a
+   * single label — two causes and two remedies in one sentence, which is a confident piece of
+   * nonsense of exactly the kind this parser exists to refuse. The marker is the grammar on that
+   * page, the same way indentation is on a Bosch one.
+   */
+  const page = [
+    'Fault' + ' '.repeat(17) + 'Cause and troubleshooting',
+    'The cookware or' + ' '.repeat(7) + 'There has been a power cut.',
+    'food is not heating' + ' '.repeat(3) + '\u25b6 Check whether the lighting in your room is working.',
+    'up.',
+    ' '.repeat(22) + 'The appliance is switched off.',
+    ' '.repeat(22) + '\u25b6 Switch the appliance on.',
+  ].join('\n');
+
+  const [s] = readSymptoms({ text: page, sourceName: 'x' }).symptoms;
+  assert.equal(s.symptom, 'The cookware or food is not heating up.');
+  assert.equal(s.causes.length, 2, `the causes were glued: ${JSON.stringify(s.causes.map((c) => c.label))}`);
+  assert.equal(s.causes[0].label, 'There has been a power cut.');
+  assert.equal(s.causes[1].label, 'The appliance is switched off.');
+
+  // And the marker itself is not part of the instruction.
+  assert.equal(s.causes[1].remedies[0], 'Switch the appliance on.');
+  for (const c of s.causes) {
+    for (const r of c.remedies) assert.ok(!/^[\u25b6•]/.test(r), `the bullet survived into a remedy: ${r}`);
+  }
+});
+
 console.log(`\n${passed} passed`);

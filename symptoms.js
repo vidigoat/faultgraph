@@ -35,7 +35,8 @@ const PAGE_NUMBER = /^\s*\d{1,4}\s*$/;
 const CROSS_REFERENCE = /^["“].*["”],?\s*(?:Page|page)\s+\d+/;
 
 /** A numbered step is still a step. The number is scaffolding, not content. */
-const stripStep = (s) => s.replace(/^\d+\.\s*/, '').trim();
+// The step's own marker is not part of the instruction — a numbered "1." or a bulleted "▶".
+const stripStep = (s) => s.replace(/^(?:\d+\.|[▶►▸‣•·–—])\s*/, '').trim();
 
 /** Join a wrapped line to the one before it, healing the hyphen the typesetter added. */
 function joinWrapped(a, b) {
@@ -262,8 +263,28 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
        * Sentence-ending punctuation is the signal, and it is the typesetter's own: a wrapped line
        * ends mid-phrase or on a hyphen, a finished one ends on a full stop.
        */
-      const finished = current && /[.!?:]$/.test(current.symptom);
-      if (leftWasBlank || finished) {
+      /*
+       * Unless the right column says otherwise.
+       *
+       * Punctuation alone split a symptom in half on a Siemens oven:
+       *
+       *     The appliance is switched on.        The operation indicator is defective.
+       *     The operation indicator does not        Call Customer Service Page 15.
+       *     light up.
+       *
+       * That is ONE symptom over three lines, and the first line ends in a full stop — so the
+       * second started a new symptom, which then had no causes at all, while the cause that
+       * belonged to it stayed with the half above. Two wrong rows, neither of which looked wrong.
+       *
+       * A new symptom always begins a new CAUSE; that is what a row in this table is. So a line
+       * whose right column is a remedy — indented, sitting under the cause above — cannot be the
+       * start of one, whatever punctuation the left column happens to end on. Two columns of
+       * indent rather than one, because a single space is the jitter you get when a row's right
+       * column starts a character late; the remedies in these manuals are indented three.
+       */
+      const underARemedy = Boolean(current) && indent >= 2 && right;
+      const finished = current && /[.!?:]$/.test(current.symptom) && !underARemedy;
+      if ((leftWasBlank && !underARemedy) || finished) {
         current = { symptom: left, causes: [], line: i };
         symptoms.push(current);
         cause = null;
@@ -292,6 +313,24 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * aid. 1. Add Rinse aid Page 16. 2. Set the amount of rinse aid to be dispensed."
      */
     const numbered = /^\d+\.\s/.test(right);
+
+    /*
+     * Some manuals mark the remedy instead of indenting it.
+     *
+     * A Siemens oven sets its whole right column flush and prefixes every remedy with ▶:
+     *
+     *     The cookware or       There has been a power cut.
+     *     food is not heating   ▶ Check whether the lighting in your room is working.
+     *     up.
+     *                           The appliance is switched off.
+     *                           ▶ Switch the appliance on.
+     *
+     * With nothing indented, the indent rule read four lines as one cause and glued the block into
+     * a single label — two causes and two remedies in one sentence. The marker is the grammar on
+     * that page exactly as indentation is on a Bosch one, and it is the same kind of signal as the
+     * numbered step already handled below.
+     */
+    const bulleted = /^[▶►▸‣•·–—]\s/.test(right);
 
     /*
      * A line flush with the boundary, sitting between two NUMBERED steps of the same cause, is
@@ -357,7 +396,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
       continue;
     }
 
-    if (indent === 0 && !numbered) {
+    if (indent === 0 && !numbered && !bulleted) {
       /*
        * Flush with the boundary. A new cause — unless the previous right-column line was also a
        * cause, in which case this is the rest of it wrapping. "Detergent or machine care product
