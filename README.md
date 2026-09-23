@@ -287,6 +287,46 @@ it, with nothing in the text to say which. Backing off to the nearest space give
 *"Home Connect cannot Home"* and the cause *"Connect set incorrectly."* — wrong in a way that looks
 right. Those rows are skipped, along with the rest of the symptom they belong to, and counted.
 
+### `procedures` — following "see Page N"
+
+A troubleshooting table points rather than explains: *"Clean the Filters, Page 35."* Read aloud to
+somebody with their hands in a machine, that is an instruction to go and find a page. This follows
+the pointer to the procedure printed there.
+
+```js
+const { reference, findProcedure, check } = require('faultgraph').procedures;
+
+const ref = reference('Clean the Filters, Page 35.');   // { title: 'Clean the Filters', page: 35 }
+const found = findProcedure(layoutPages, ref);          // pages from `pdftotext -layout`, in file order
+const kept = check(found, readingOrderText);            // a SECOND reading: `pdftotext -f 35 -l 36 file -`
+```
+
+```js
+{
+  found: true, checked: true, heading: 'Cleaning filters', page: 35, pages: [35, 36],
+  steps: [
+    { n: 1, text: 'Check the filters for residue after each wash.', notes: [], page: 35 },
+    { n: 2, text: 'Turn the coarse filter counterclockwise and remove the filter system.',
+      notes: ['Ensure that foreign objects do not fall into the sump.'], page: 35 },
+    // … seven in all, across the page break
+  ],
+}
+```
+
+Two-column pages are split **per band** at the right column's left edge (a page can open with a
+full-width table and end in two columns), headings are matched by stem (*"Clean the Filters"* is
+printed *"Cleaning filters"*), and steps are taken **in sequence** across column and page breaks so
+the other column's own numbered list never gets in.
+
+**`check` is the part that matters.** Every step must be re-found in an independent reading of the
+same pages or the whole procedure is refused — a procedure with one wrong step is worse than the
+pointer it replaces, because it will be followed. And words on the page are not enough: run over a
+real library, every word of five wrong procedures *was* on the page — the defrosting steps under
+*"Switch on ice cube production"*, a power adapter under *"Align the appliance"*, one step of seven.
+So step 1 must be on the page the manual cited and follow its heading, and the manual's numbering
+must not carry on past the last step kept. On that library: 73 references, 10 procedures kept, the
+rest refused by reason — and the kept ten read by a person before anything used them.
+
 ## What it will not do, honestly
 
 - **It does not read PDFs or images.** Give it text. Extraction is somebody else's job, and keeping
@@ -332,7 +372,7 @@ right. Those rows are skipped, along with the rest of the symptom they belong to
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 29 for symptom tables and 7 that check this README
+npm test      # 52 checks, no network — plus 29 for symptom tables, 12 for procedures and 7 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

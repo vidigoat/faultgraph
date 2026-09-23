@@ -704,11 +704,14 @@ function prune({ space, outcome }) {
 }
 
 const { readSymptoms, columnBoundary } = require('./symptoms');
+const procedures = require('./procedures');
 
 module.exports = {
   parse, merge, spaceFor, next, prune, entropy, normalise, score, expectedEntropyAfter, EFFORT,
   // Tables keyed on a described symptom rather than a code — which is what manufacturers print now.
   readSymptoms, columnBoundary,
+  // Following a remedy's "see Page N" to the procedure printed there — see procedures.js.
+  procedures,
   // The pieces, exported because a manual you have never seen may need one of them adjusted.
   matchCodeLine, joinOrphanCodes, observationsFrom, conjugate,
   effortOf, isMains, remedyToCause, normaliseCode, CONDITION, CODE_LINE, CODE_PATTERNS, NOT_A_CODE,
