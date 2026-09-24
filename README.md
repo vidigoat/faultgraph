@@ -128,7 +128,7 @@ It also tells apart the two ways of finding nothing, because they need opposite 
 person holding the manual:
 
 ```js
-parse({ text: twoColumnTable }).coverage
+parse({ text: columnsMadeOfSpaces }).coverage
 // '2 fault codes seen, none with remedies beneath them — this looks like the right page
 //  in a layout I cannot read (remedies in a column to the right?)'
 ```
@@ -136,6 +136,11 @@ parse({ text: twoColumnTable }).coverage
 A wrong page means go and find the fault table. A layout it cannot read means you are already
 looking at the right page — and reporting that as "nothing usable found" sends somebody hunting for
 something in their hands. `orphanCodes` carries the count.
+
+A table whose columns reached the text as **delimiters** is read: pipes, tabs, or a markdown table.
+Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends and
+semicolons, in the manual's order — and every cause cites the row it came from. What still defeats
+it is columns made of nothing but spacing, which is what that message is for.
 
 This matters because the output is meant to be **acted on** — somebody opening a machine, or
 spending money on a part. A plausible-sounding invented remedy is worse than no answer at all. So:
@@ -390,7 +395,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 53 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

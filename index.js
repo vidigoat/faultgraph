@@ -185,6 +185,40 @@ function remedyToCause(remedy) {
  * the rest of the parser only ever sees one shape — and, more to the point, means a perfectly good
  * transcription is not thrown away over a line break.
  */
+/**
+ * A fault table whose columns reached us as delimited rows — `E24 | Water cannot drain | Check the
+ * filter.`, the same with tabs, or a markdown table — rewritten as the layout the rest of this file
+ * reads: the code and its meaning on one line, then one remedy per line beneath it.
+ *
+ * Before this, such a page came back "2 fault codes seen, none with remedies beneath them": the
+ * right page, in a layout it could not read. The remedy cell is split at sentence ends and at
+ * semicolons, because a cell usually holds the whole ordered list.
+ *
+ * Every produced line remembers the row it came from, so a citation still points at the line on
+ * the page. A row whose first cell is not a code — the header, a divider — is left as it was.
+ */
+function expandDelimitedRows(lines) {
+  const out = [];
+  const origin = [];
+  lines.forEach((line, i) => {
+    const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
+    const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(c === '' && (k === 0 || k === all.length - 1))) : [];
+    const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec(cells[0]) : null;
+    if (!code || NOT_A_CODE.has(code[1].toUpperCase())) { out.push(line); origin.push(i); return; }
+    const [, meaning = '', ...rest] = cells;
+    out.push(`${code[1]}   ${meaning}`);
+    origin.push(i);
+    for (const cell of rest) {
+      for (const remedy of cell.split(/(?<=[.!?])\s+|;\s*/).map((r) => r.trim()).filter((r) => r.length > 3)) {
+        out.push(remedy);
+        origin.push(i);
+      }
+    }
+  });
+  Object.defineProperty(out, 'origin', { value: origin });
+  return out;
+}
+
 function joinOrphanCodes(lines) {
   const out = [];
   // Joining two lines into one shifts every line number after it. A citation is only worth
@@ -242,9 +276,10 @@ function coverageOf(found, orphanCodes) {
  * one a guessing parser would never give.
  */
 function parse({ model, equipment = model, text, sourceName = 'manual' }) {
-  const lines = joinOrphanCodes(String(text).split(/\r?\n/));
+  const expanded = expandDelimitedRows(String(text).split(/\r?\n/));
+  const lines = joinOrphanCodes(expanded);
   /** Output line index → the line number a reader would count to on the original page. */
-  const onPage = (idx) => (lines.origin ? lines.origin[idx] : idx) + 1;
+  const onPage = (idx) => expanded.origin[lines.origin ? lines.origin[idx] : idx] + 1;
   const codes = {};
   let found = 0;
   // Codes that looked like codes but had no remedies beneath them. Counted separately, because

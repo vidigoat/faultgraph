@@ -657,4 +657,18 @@ it('parsing is deterministic — the same text gives the same graph', () => {
   assert.deepEqual(parse(COMPRESSOR), parse(COMPRESSOR));
 });
 
+it('a fault table in columns — pipes, tabs or markdown — is read, and cites the row', () => {
+  // It used to come back "2 fault codes seen, none with remedies beneath them".
+  const pipe = parse('Code | Meaning | Remedy\nE24 | Water cannot drain | Check the drain filter. Straighten the drain hose.\nE15 | Water in base tray | Check the door seal.');
+  assert.equal(pipe.coverage, '2 fault codes recovered');
+  assert.equal(pipe.codes.E24.meaning, 'Water cannot drain');
+  assert.equal(pipe.codes.E24.causes.length, 2, 'the remedy cell was not split into its ordered list');
+  assert.ok(pipe.codes.E24.causes.every((c) => c.source.line === 2), 'a cause lost the row it came from');
+  const tab = parse('Code\tMeaning\tRemedy\nE24\tWater cannot drain\tCheck the drain filter; straighten the drain hose.');
+  assert.equal(tab.codes.E24.causes.length, 2, 'a semicolon-separated cell was not split');
+  const md = parse('| Code | Meaning | Remedy |\n|---|---|---|\n| E24 | Water cannot drain | Check the drain filter. |');
+  assert.equal(md.codes.E24.causes[0].source.line, 3);
+  assert.equal(Object.keys(md.codes).length, 1, 'the header or the divider row was read as a code');
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);
