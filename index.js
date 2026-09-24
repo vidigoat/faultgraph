@@ -260,7 +260,13 @@ function expandDelimitedRows(lines) {
     }
     // A row with its code cell left empty continues the code above it, as merged cells print.
     const continues = !code && header && lastCode && cells[codeAt] === '' && cells.some(Boolean);
-    if (!continues && (!code || NOT_A_CODE.has(code[1].toUpperCase()))) { if (line.trim()) lastCode = null; out.push(line); origin.push(i); return; }
+    if (!continues && (!code || NOT_A_CODE.has(code[1].toUpperCase()))) {
+      if (line.trim()) lastCode = null;
+      // "Cause: blocked filter. Remedy: clean the filter." — both labels on one line, read as two.
+      const both = !sep && /^\s*((?:possible |probable )?(?:cause|reason)\s*:.+?)\s+((?:remedy|action|solution|what to do)\s*:.+)$/i.exec(line);
+      for (const part of both ? [both[1], both[2]] : [line]) { out.push(part); origin.push(i); }
+      return;
+    }
     const pick = (k) => (k != null && k >= 0 ? cells[k] || '' : '');
     const meaning = header && header.meaning >= 0 ? pick(header.meaning) : cells[1] || '';
     const rest = header ? [pick(header.cause), pick(header.fix)].filter(Boolean) : cells.slice(2);
@@ -412,15 +418,15 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
        * the remedy-verb test, and be stored as a cause whose text was the literal string "REASON:"
        * — which appeared on screen as the meaning of a real fault code on a real machine.
        */
-      const labelled = /^(REASON|CAUSE|REMEDY|ACTION|REMEDIAL ACTION)\s*:\s*(.*)$/i.exec(text);
+      const labelled = /^((?:POSSIBLE |PROBABLE )?(?:REASON|CAUSE)|REMEDY|ACTION|REMEDIAL ACTION|SOLUTION|WHAT TO DO)\s*:\s*(.*)$/i.exec(text);
       if (labelled) {
-        const kind = labelled[1].toUpperCase();
+        const kind = labelled[1].toUpperCase().replace(/^(POSSIBLE|PROBABLE) /, '');
         const body = labelled[2].trim();
         if (kind === 'REASON' || kind === 'CAUSE') {
           // Empty means the cell was shared with the code above. Not a reason, and not a string.
           pendingReason = body || null;
         } else if (body) {
-          following.push(body);
+          following.push(body.charAt(0).toUpperCase() + body.slice(1));
           atLine.push(onPage(j));
           statedCause.push(pendingReason);
           pendingReason = null;

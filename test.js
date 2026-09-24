@@ -729,4 +729,12 @@ it('steps in one cell — numbered, bulleted — and a row continuing the code a
   assert.deepEqual(merged.codes.E24.causes.map((c) => [c.label, c.source.line]), [['Filter blocked', 2], ['Drain hose kinked', 3]]);
 });
 
+it('"Cause: … Remedy: …" on one line, and "Possible cause" / "Solution" labels, are read', () => {
+  const g = parse('E24   Water cannot drain\nCause: blocked filter. Remedy: clean the filter.\nPossible cause: kinked drain hose\nSolution: straighten the hose');
+  assert.deepEqual(g.codes.E24.causes.map((c) => [c.label, c.remedy, c.source.line]), [
+    ['Blocked filter', 'Clean the filter.', 2],
+    ['Kinked drain hose', 'Straighten the hose', 4],
+  ]);
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);
