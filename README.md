@@ -140,7 +140,8 @@ mentions codes in its paragraphs says so, rather than blaming the layout: nothin
 as a remedy.
 
 A table whose columns reached the text as **delimiters** is read: pipes, tabs, a markdown table, or a
-CSV export (commas or semicolons; quoted cells may hold commas or line breaks).
+CSV export (commas or semicolons; a quoted cell may hold commas). A quoted cell spanning several
+lines is rejoined in tab-separated rows, as a spreadsheet copies them; in a CSV file it is not yet.
 Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends,
 semicolons, bullets and "1. … 2. …", in the manual's order — and every cause cites the row it came
 from. A row with its code cell left empty continues the code above it, as a merged cell prints. What still defeats
