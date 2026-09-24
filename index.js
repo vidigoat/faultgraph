@@ -261,10 +261,31 @@ function expandDelimitedRows(lines) {
     rows.push([line, start]);
   }
   const unquote = (c) => (/^"[\s\S]*"$/.test(c) ? c.slice(1, -1).replace(/""/g, '"').trim() : c);
+  /*
+   * A CSV export — commas, or semicolons from a European spreadsheet. Only when nothing on the
+   * page is tab- or pipe-separated and at least two lines start with a code then the separator:
+   * prose is full of commas, and "E24, the drain error, means…" once is a sentence, not a table.
+   */
+  const csvLead = (l) => /^\s*"?[A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?"?\s*([,;])/.exec(l);
+  const leads = lines.map(csvLead).filter(Boolean).map((m) => m[1]);
+  const csv = !lines.some((l) => /[\t|]/.test(l)) && leads.length >= 2
+    ? (leads.filter((d) => d === ';').length > leads.length / 2 ? ';' : ',') : null;
+  const splitCsv = (l) => {
+    const out = [];
+    let cur = '';
+    let quoted = false;
+    for (const ch of l) {
+      if (ch === '"') quoted = !quoted;
+      if (ch === csv && !quoted) { out.push(cur); cur = ''; } else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  };
   rows.forEach(([line, i]) => {
-    const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
+    const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : csv && line.includes(csv) ? csv : null;
     // Only a markdown row has pipes at its edges; a tab row's empty first cell is a real, empty cell.
-    const cells = sep ? line.split(sep).map((c) => unquote(c.trim())).filter((c, k, all) => !(sep === '|' && c === '' && (k === 0 || k === all.length - 1))) : [];
+    const split = sep === csv ? splitCsv(line) : sep ? line.split(sep) : [];
+    const cells = split.map((c) => unquote(c.trim())).filter((c, k, all) => !(sep === '|' && c === '' && (k === 0 || k === all.length - 1)));
     // A header holds for its own table only: a line that is not a row ends it, and a row of a
     // different width belongs to some other table, read by position.
     if (!sep && line.trim()) columns = null;

@@ -770,4 +770,14 @@ it('a row copied out of a spreadsheet, with a quoted cell over several lines, is
   assert.deepEqual(Object.keys(inches.codes), ['E24', 'E25']);
 });
 
+it('a CSV export is read — commas or semicolons — and a sentence starting "E24," is not one', () => {
+  const comma = parse('Code,Meaning,Remedy\nE24,Water cannot drain,Check the drain filter\nE25,Pump blocked,"Remove the pump cover, then clear it"');
+  assert.deepEqual(Object.keys(comma.codes), ['E24', 'E25']);
+  assert.equal(comma.codes.E25.causes[0].remedy, 'Remove the pump cover, then clear it', 'a quoted comma split the cell');
+  const semi = parse('Code;Meaning;Remedy\nE24;Water cannot drain;Check the drain filter\nE25;Pump blocked;Remove the pump cover');
+  assert.equal(semi.codes.E24.causes[0].source.line, 2);
+  const prose = parse('E24, the drain error, means the water stays in the tub.\nCheck the drain filter.');
+  assert.notEqual(prose.codes.E24?.meaning, 'the drain error', 'one sentence was read as a CSV row');
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

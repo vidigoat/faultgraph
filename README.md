@@ -139,7 +139,8 @@ something in their hands. `orphanCodes` carries the count, and `orphans` the cod
 mentions codes in its paragraphs says so, rather than blaming the layout: nothing in prose is read
 as a remedy.
 
-A table whose columns reached the text as **delimiters** is read: pipes, tabs, or a markdown table.
+A table whose columns reached the text as **delimiters** is read: pipes, tabs, a markdown table, or a
+CSV export (commas or semicolons; quoted cells may hold commas or line breaks).
 Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends,
 semicolons, bullets and "1. … 2. …", in the manual's order — and every cause cites the row it came
 from. A row with its code cell left empty continues the code above it, as a merged cell prints. What still defeats
@@ -411,7 +412,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 61 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 62 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
