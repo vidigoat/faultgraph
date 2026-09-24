@@ -241,10 +241,30 @@ function expandDelimitedRows(lines) {
     if (/fix|remed|solution|action|what to do|repair|steps/.test(t)) return 'fix';
     return 'other';
   };
-  lines.forEach((line, i) => {
+  /*
+   * A spreadsheet's clipboard quotes a cell that holds line breaks — `E24<tab>"Check the filter.
+   * <newline>Straighten the hose."` — so one row arrives as several lines. They are rejoined (cited
+   * at the row's first line) and the quotes taken off, or the second step read as a cause
+   * `Drain hose." is kinked`.
+   */
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const start = i;
+    // Open only when a cell starts with a quote: a 3" hose in one row and a 5" one in the next are
+    // two rows, not one cell.
+    const odd = (l) => (l.match(/"/g) || []).length % 2 === 1;
+    if (/\t"/.test(line) && odd(line)) {
+      while (i + 1 < lines.length && i - start < 20 && odd(line)) line += ' ' + lines[++i].trim();
+      if (odd(line)) { line = lines[start]; i = start; }
+    }
+    rows.push([line, start]);
+  }
+  const unquote = (c) => (/^"[\s\S]*"$/.test(c) ? c.slice(1, -1).replace(/""/g, '"').trim() : c);
+  rows.forEach(([line, i]) => {
     const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
     // Only a markdown row has pipes at its edges; a tab row's empty first cell is a real, empty cell.
-    const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(sep === '|' && c === '' && (k === 0 || k === all.length - 1))) : [];
+    const cells = sep ? line.split(sep).map((c) => unquote(c.trim())).filter((c, k, all) => !(sep === '|' && c === '' && (k === 0 || k === all.length - 1))) : [];
     // A header holds for its own table only: a line that is not a row ends it, and a row of a
     // different width belongs to some other table, read by position.
     if (!sep && line.trim()) columns = null;

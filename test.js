@@ -761,4 +761,13 @@ it('an article that mentions codes is called prose, not a table in a layout it c
   assert.match(columns.coverage, /column to the right/);
 });
 
+it('a row copied out of a spreadsheet, with a quoted cell over several lines, is one row', () => {
+  const g = parse('Code\tMeaning\tRemedy\r\nE24\tWater cannot drain\t"Check the drain filter.\r\nStraighten the drain hose."\r\nE25\tPump blocked\tRemove the pump cover\r\n');
+  assert.deepEqual(g.codes.E24.causes.map((c) => [c.remedy, c.source.line]), [['Check the drain filter.', 2], ['Straighten the drain hose.', 2]]);
+  assert.equal(g.codes.E25.causes[0].source.line, 4);
+  // An inch mark is not an open quote: two rows with one each stay two rows.
+  const inches = parse('Code\tMeaning\tRemedy\nE24\tDrain blocked\tCheck the 3" drain hose\nE25\tPump blocked\tCheck the 5" pump outlet');
+  assert.deepEqual(Object.keys(inches.codes), ['E24', 'E25']);
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

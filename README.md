@@ -411,7 +411,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 60 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 61 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
