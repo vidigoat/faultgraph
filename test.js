@@ -687,6 +687,7 @@ it('a header row decides which column is which — a DIY column is not a cause, 
   assert.ok(!JSON.stringify(g.codes).includes('"Pro"') && !JSON.stringify(g.codes).includes('Inspect First'), 'the DIY column leaked in');
   assert.equal(g.codes.E09, undefined, 'a technician-only row was given a do-it-yourself remedy');
   assert.equal(g.orphanCodes, 1, 'the technician-only row was not counted as seen');
+  assert.deepEqual(g.orphans, ['E09'], 'which code was seen without a remedy was not said');
 });
 
 it('a header holds for its own table only, and names the code column wherever it is', () => {

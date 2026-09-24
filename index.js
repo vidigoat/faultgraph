@@ -359,6 +359,7 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
   // "this page has no fault table on it" and "this page has one and I could not read its layout"
   // are different problems with different fixes, and they were sharing a sentence.
   let orphanCodes = 0;
+  const orphans = [];
 
   lines.forEach((line, i) => {
     const m = matchCodeLine(line);
@@ -479,7 +480,7 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
       source: { line: atLine[k], codeLine: onPage(i), manual: sourceName },
     }));
 
-    if (causes.length === 0) { orphanCodes++; return; }
+    if (causes.length === 0) { orphanCodes++; orphans.push(code); return; }
     found++;
 
     // A remedy check tests exactly one cause, so a table of them is irreducibly linear: a "no"
@@ -533,6 +534,8 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
      * already looking at.
      */
     orphanCodes,
+    // Which codes those were: a reader told "2 recovered" of a table with 3 rows asks which one went.
+    orphans,
   };
 }
 
