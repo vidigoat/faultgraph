@@ -689,4 +689,21 @@ it('a header row decides which column is which — a DIY column is not a cause, 
   assert.equal(g.orphanCodes, 1, 'the technician-only row was not counted as seen');
 });
 
+it('a header holds for its own table only, and names the code column wherever it is', () => {
+  // A second, headerless table further down the page used to be read with the first table's
+  // columns: its remedy cell was taken as a cause, whole, and its two steps became one.
+  const two = parse([
+    'Code | Meaning | Common Cause | Fix | DIY?',
+    'E15 | Leak | Hose leak | Turn off the water supply | Yes',
+    '',
+    'Other errors',
+    'E24 | Water cannot drain | Check the drain filter; straighten the drain hose',
+  ].join('\n'));
+  assert.equal(two.codes.E24.causes.length, 2, 'the second table was read with the first one\'s header');
+  // Some pages put the meaning first; the header says so, and was not listened to.
+  const moved = parse('Meaning\tCode\tFix\nWater cannot drain\tE24\tCheck the drain filter');
+  assert.ok(moved.codes.E24, 'a code column that is not the first was never read');
+  assert.equal(moved.codes.E24.meaning, 'Water cannot drain');
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

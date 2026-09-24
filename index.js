@@ -212,31 +212,37 @@ function expandDelimitedRows(lines) {
     const t = h.toLowerCase();
     if (/(^|\b)(code|error|fault code|display)(\b|$)/.test(t) && !/mean|descr/.test(t)) return 'code';
     if (/mean|descr|problem|indicat|what it/.test(t)) return 'meaning';
-    if (/cause|reason|why/.test(t)) return 'cause';
+    // "Cause & remedy" is one cell holding both: read it as the remedy list, which it splits.
+    if (/cause|reason|why/.test(t) && !/fix|remed|solution|action|what to do/.test(t)) return 'cause';
     if (/fix|remed|solution|action|what to do|repair|steps/.test(t)) return 'fix';
     return 'other';
   };
   lines.forEach((line, i) => {
     const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
     const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(c === '' && (k === 0 || k === all.length - 1))) : [];
-    const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec(cells[0]) : null;
+    // A header holds for its own table only: a line that is not a row ends it, and a row of a
+    // different width belongs to some other table, read by position.
+    if (!sep && line.trim()) columns = null;
+    const header = columns && cells.length === columns.width ? columns : null;
+    const codeAt = header && header.code >= 0 ? header.code : 0;
+    const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec(cells[codeAt]) : null;
     if (!code && cells.length >= 3 && cells.some((c) => /mean|descr|cause|fix|remed|solution/i.test(c))) {
       const roles = cells.map(role);
       // "DIY Fix?" is the fix column only when there is no plainer one.
       const fixes = roles.map((r, k) => (r === 'fix' ? k : -1)).filter((k) => k >= 0);
       const fix = fixes.find((k) => !/diy|\?$/i.test(cells[k])) ?? fixes[0];
-      columns = { meaning: roles.indexOf('meaning'), cause: roles.indexOf('cause'), fix: fix ?? -1 };
+      columns = { width: cells.length, code: roles.indexOf('code'), meaning: roles.indexOf('meaning'), cause: roles.indexOf('cause'), fix: fix ?? -1 };
     }
     if (!code || NOT_A_CODE.has(code[1].toUpperCase())) { out.push(line); origin.push(i); return; }
     const pick = (k) => (k != null && k >= 0 ? cells[k] || '' : '');
-    const meaning = columns && columns.meaning >= 0 ? pick(columns.meaning) : cells[1] || '';
-    const rest = columns ? [pick(columns.cause), pick(columns.fix)].filter(Boolean) : cells.slice(2);
+    const meaning = header && header.meaning >= 0 ? pick(header.meaning) : cells[1] || '';
+    const rest = header ? [pick(header.cause), pick(header.fix)].filter(Boolean) : cells.slice(2);
     out.push(`${code[1]}   ${meaning}`);
     origin.push(i);
     // With a cause column the row is a three-column table — reason, then action — and the parser
     // pairs them one line each, so the fix cell stays whole. Without one, the remedy cell is the
     // manual's ordered list, split into its steps.
-    const whole = columns && columns.cause >= 0;
+    const whole = header && header.cause >= 0;
     for (const cell of rest) {
       const parts = whole ? [cell] : cell.split(/(?<=[.!?])\s+|;\s*/);
       for (const remedy of parts.map((r) => r.trim()).filter((r) => r.length > 3)) {
