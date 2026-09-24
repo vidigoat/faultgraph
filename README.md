@@ -148,7 +148,9 @@ is one, decides which column is which: "Common Cause" is the cause, "Fix" is the
 column is neither. On two real error-code pages copied out of a browser, that recovered 11 of 15
 codes (the other four rows were technician-only, and are counted as seen) and 3 of 14 on a page
 whose only "fix" column says who should do the work rather than what to do. A header holds for its
-own table only; a row of another width is read by position.
+own table only; a row of another width is read by position. One thing still defeats it here: sub-codes.
+A washer that prints E:30-10 (blocked inlet filters) and E:30-20 (a critical malfunction) gives
+two faults one key, E30, and only the later entry is kept.
 
 Outside tables, a remedy is recognised by its verb. Words that are as often nouns — "drain",
 "tilt", "empty" — count only as an instruction's first word, so "Drain pump blocked" stays a reason
