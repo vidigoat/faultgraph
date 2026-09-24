@@ -706,4 +706,10 @@ it('a header holds for its own table only, and names the code column wherever it
   assert.equal(moved.codes.E24.meaning, 'Water cannot drain');
 });
 
+it('a cause the manual names before a colon is the label; a "Note:" is not a cause', () => {
+  const g = parse('E24   Water cannot drain\nBlocked filter: clean the filter.\nNote: straighten the drain hose.');
+  assert.deepEqual(g.codes.E24.causes.map((c) => c.label), ['Blocked filter', 'Drain hose is kinked']);
+  assert.equal(g.codes.E24.causes[0].remedy, 'Blocked filter: clean the filter.', 'the remedy must stay as printed');
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

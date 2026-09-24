@@ -165,6 +165,14 @@ function tidy(text) {
 
 function remedyToCause(remedy) {
   const text = remedy.replace(/\.$/, '').trim();
+  // "Blocked filter: clean the filter" — the manual named the cause itself, before the colon.
+  // "Note: check the filter" did not: a heading word before the colon is not a cause.
+  const stated = /^([^:]{3,60}):\s+(.+)$/.exec(text);
+  if (stated && /^(note|tip|important|remedy|solution|fix|action|what to do)$/i.test(stated[1].trim())) return remedyToCause(stated[2]);
+  if (stated && REMEDY_HINTS.test(stated[2].split(/\s+/).slice(0, 2).join(' ')) && !REMEDY_HINTS.test(stated[1].split(/\s+/)[0])
+    && !/^(note|tip|important|caution|warning|danger|attention|step\b|then|first|remedy|solution|fix|action|what to do)/i.test(stated[1])) {
+    return tidy(stated[1]);
+  }
   for (const [pattern, phrase] of CAUSE_PHRASINGS) {
     const m = text.match(pattern);
     if (m) {
@@ -246,7 +254,7 @@ function expandDelimitedRows(lines) {
     for (const cell of rest) {
       const parts = whole ? [cell] : cell.split(/(?<=[.!?])\s+|;\s*/);
       for (const remedy of parts.map((r) => r.trim()).filter((r) => r.length > 3)) {
-        out.push(remedy);
+        out.push(remedy.charAt(0).toUpperCase() + remedy.slice(1));
         origin.push(i);
       }
     }
