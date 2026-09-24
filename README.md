@@ -140,7 +140,11 @@ something in their hands. `orphanCodes` carries the count.
 A table whose columns reached the text as **delimiters** is read: pipes, tabs, or a markdown table.
 Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends and
 semicolons, in the manual's order — and every cause cites the row it came from. What still defeats
-it is columns made of nothing but spacing, which is what that message is for.
+it is columns made of nothing but spacing, which is what that message is for. A header row, when there
+is one, decides which column is which: "Common Cause" is the cause, "Fix" is the remedy, and a "DIY?"
+column is neither. On two real error-code pages copied out of a browser, that recovered 11 of 15
+codes (the other four rows were technician-only, and are counted as seen) and 3 of 14 on a page
+whose only "fix" column says who should do the work rather than what to do.
 
 This matters because the output is meant to be **acted on** — somebody opening a machine, or
 spending money on a part. A plausible-sounding invented remedy is worse than no answer at all. So:
@@ -395,7 +399,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 53 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 54 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

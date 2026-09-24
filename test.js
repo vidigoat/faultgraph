@@ -671,4 +671,22 @@ it('a fault table in columns — pipes, tabs or markdown — is read, and cites 
   assert.equal(Object.keys(md.codes).length, 1, 'the header or the divider row was read as a code');
 });
 
+it('a header row decides which column is which — a DIY column is not a cause, a cause column is', () => {
+  // The shape of real error-code pages: Code | Meaning | Common Cause | Fix | DIY?. Read by
+  // position, the DIY answer ("Pro") became a cause; and "turn off the water supply" was not
+  // recognised as a remedy at all, so that code was dropped.
+  const text = [
+    'Error Code\tMeaning\tCommon Cause\tFix\tDIY?',
+    'E15\tLeak sensor activated\tWater in base pan from a hose leak\tTurn off water supply; tilt machine to drain base\tInspect First',
+    'E22\tDrain blocked\tFood debris in the filter\tClean the filter\tYes',
+    'E09\tHeating element fault\tElement failure\tProfessional element testing required\tPro',
+  ].join('\n');
+  const g = parse(text);
+  assert.ok(g.codes.E15, 'a remedy that starts "turn off" was not recognised');
+  assert.equal(g.codes.E15.causes[0].label, 'Water in base pan from a hose leak', 'the cause column was not the cause');
+  assert.ok(!JSON.stringify(g.codes).includes('"Pro"') && !JSON.stringify(g.codes).includes('Inspect First'), 'the DIY column leaked in');
+  assert.equal(g.codes.E09, undefined, 'a technician-only row was given a do-it-yourself remedy');
+  assert.equal(g.orphanCodes, 1, 'the technician-only row was not counted as seen');
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

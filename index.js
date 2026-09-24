@@ -102,7 +102,9 @@ function matchCodeLine(line) {
 const CODE_LINE = { test: (line) => matchCodeLine(line) !== null };
 
 /** Words that mark a line as describing a remedy rather than a symptom. */
-const REMEDY_HINTS = /\b(check|clean|clear|replace|inspect|remove|tighten|straighten|reset|ensure|lock|install|unscrew|descale|refill|arrange)\b/i;
+// Grown from real error-code pages: "Turn off water supply; tilt machine to drain base", "Run
+// dishwasher cleaner / descaler" were remedies this did not recognise, so their codes were dropped.
+const REMEDY_HINTS = /\b(check|clean|clear|replace|inspect|remove|tighten|straighten|reset|ensure|lock|install|unscrew|descal\w*|refill|arrange|turn (?:off|on)|switch (?:off|on)|unplug|tilt|drain|flush|reconnect|re-?seat|fix|repair|close|run a|run the|run dishwasher|restart|empty)\b/i;
 
 /**
  * Rough cost of asking a person to do the thing described. Drives information gain.
@@ -200,16 +202,44 @@ function remedyToCause(remedy) {
 function expandDelimitedRows(lines) {
   const out = [];
   const origin = [];
+  /*
+   * Which column is which, once a header row has said so. Real error-code pages carry more than
+   * code | meaning | remedy — "Common Cause", "Fix", "DIY?" — and read by position, a DIY answer
+   * ("Pro") became a cause. A header naming the columns is followed; without one, position is.
+   */
+  let columns = null;
+  const role = (h) => {
+    const t = h.toLowerCase();
+    if (/(^|\b)(code|error|fault code|display)(\b|$)/.test(t) && !/mean|descr/.test(t)) return 'code';
+    if (/mean|descr|problem|indicat|what it/.test(t)) return 'meaning';
+    if (/cause|reason|why/.test(t)) return 'cause';
+    if (/fix|remed|solution|action|what to do|repair|steps/.test(t)) return 'fix';
+    return 'other';
+  };
   lines.forEach((line, i) => {
     const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
     const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(c === '' && (k === 0 || k === all.length - 1))) : [];
     const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec(cells[0]) : null;
+    if (!code && cells.length >= 3 && cells.some((c) => /mean|descr|cause|fix|remed|solution/i.test(c))) {
+      const roles = cells.map(role);
+      // "DIY Fix?" is the fix column only when there is no plainer one.
+      const fixes = roles.map((r, k) => (r === 'fix' ? k : -1)).filter((k) => k >= 0);
+      const fix = fixes.find((k) => !/diy|\?$/i.test(cells[k])) ?? fixes[0];
+      columns = { meaning: roles.indexOf('meaning'), cause: roles.indexOf('cause'), fix: fix ?? -1 };
+    }
     if (!code || NOT_A_CODE.has(code[1].toUpperCase())) { out.push(line); origin.push(i); return; }
-    const [, meaning = '', ...rest] = cells;
+    const pick = (k) => (k != null && k >= 0 ? cells[k] || '' : '');
+    const meaning = columns && columns.meaning >= 0 ? pick(columns.meaning) : cells[1] || '';
+    const rest = columns ? [pick(columns.cause), pick(columns.fix)].filter(Boolean) : cells.slice(2);
     out.push(`${code[1]}   ${meaning}`);
     origin.push(i);
+    // With a cause column the row is a three-column table — reason, then action — and the parser
+    // pairs them one line each, so the fix cell stays whole. Without one, the remedy cell is the
+    // manual's ordered list, split into its steps.
+    const whole = columns && columns.cause >= 0;
     for (const cell of rest) {
-      for (const remedy of cell.split(/(?<=[.!?])\s+|;\s*/).map((r) => r.trim()).filter((r) => r.length > 3)) {
+      const parts = whole ? [cell] : cell.split(/(?<=[.!?])\s+|;\s*/);
+      for (const remedy of parts.map((r) => r.trim()).filter((r) => r.length > 3)) {
         out.push(remedy);
         origin.push(i);
       }
