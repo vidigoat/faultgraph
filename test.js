@@ -751,6 +751,14 @@ it('an article that mentions codes is called prose, not a table in a layout it c
   // A pasted table's rows are long too, and are never prose.
   const table = parse('E24\tWater cannot drain\t' + 'Check the drain filter and clear anything caught in it, then run a short programme and watch that the water leaves the tub. '.repeat(2));
   assert.match(table.coverage, /recovered/);
+  // Nor is a two-column page from `pdftotext -layout`, whose long lines are columns spaced apart:
+  // that one really is a layout it cannot read, and must still say so.
+  const row = (c, m, r) => `${c}   ${m}`.padEnd(80) + '    ' + r;
+  const columns = parse([
+    row('E24', 'Water cannot drain because the filter or the drain hose is blocked', 'Check the drain filter and clear it; straighten the drain hose'),
+    row('E25', 'Drain pump cover blocked by broken glass or foil from a tablet', 'Remove the pump cover and clear anything caught in the impeller'),
+  ].join('\n'));
+  assert.match(columns.coverage, /column to the right/);
 });
 
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

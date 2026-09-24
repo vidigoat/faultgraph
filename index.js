@@ -325,12 +325,13 @@ function joinOrphanCodes(lines) {
 
 /**
  * Most of the words in paragraph-long lines that are not table rows: an article, not a table. A
- * copied table's rows are long too, so a line holding tabs or pipes never counts as prose.
+ * copied table's rows are long too, and so is a `pdftotext -layout` line with its columns spaced
+ * apart, so a line holding tabs, pipes or a column-wide gap never counts as prose.
  */
 function isProse(text) {
   const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const all = lines.reduce((n, l) => n + l.length, 0);
-  const prose = lines.filter((l) => l.length > 140 && !/[\t|]/.test(l)).reduce((n, l) => n + l.length, 0);
+  const prose = lines.filter((l) => l.length > 140 && !/[\t|]|\S {3,}\S/.test(l)).reduce((n, l) => n + l.length, 0);
   return all > 0 && prose / all > 0.5;
 }
 
