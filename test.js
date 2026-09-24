@@ -738,4 +738,19 @@ it('"Cause: … Remedy: …" on one line, and "Possible cause" / "Solution" labe
   ]);
 });
 
+it('an article that mentions codes is called prose, not a table in a layout it cannot read', () => {
+  // A repair blog: codes in paragraphs. "Remedies in a column to the right?" sent the reader
+  // looking for a column that is not there.
+  const article = parse([
+    'Bosch error codes',
+    'E24 is almost always a clogged filter or a kinked drain hose, and most people can fix it in twenty minutes with nothing more than a towel and a screwdriver.',
+    'E15 means water got into the base pan and lifted the float switch; tilting the machine forward drains it, and then you go looking for where the water came from.',
+  ].join('\n'));
+  assert.equal(Object.keys(article.codes).length, 0, 'prose was read as a fault table');
+  assert.match(article.coverage, /running prose rather than a table/);
+  // A pasted table's rows are long too, and are never prose.
+  const table = parse('E24\tWater cannot drain\t' + 'Check the drain filter and clear anything caught in it, then run a short programme and watch that the water leaves the tub. '.repeat(2));
+  assert.match(table.coverage, /recovered/);
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

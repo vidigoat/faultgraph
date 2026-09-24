@@ -324,10 +324,27 @@ function joinOrphanCodes(lines) {
 }
 
 /**
+ * Most of the words in paragraph-long lines that are not table rows: an article, not a table. A
+ * copied table's rows are long too, so a line holding tabs or pipes never counts as prose.
+ */
+function isProse(text) {
+  const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const all = lines.reduce((n, l) => n + l.length, 0);
+  const prose = lines.filter((l) => l.length > 140 && !/[\t|]/.test(l)).reduce((n, l) => n + l.length, 0);
+  return all > 0 && prose / all > 0.5;
+}
+
+/**
  * How to describe what came back, including the two different ways it can be empty.
  */
-function coverageOf(found, orphanCodes) {
+function coverageOf(found, orphanCodes, prose = false) {
   if (found > 0) return `${found} fault code${found === 1 ? '' : 's'} recovered`;
+  // An article that mentions codes in paragraphs is not a table in a strange layout, and saying
+  // "remedies in a column to the right?" sends somebody looking for a column that is not there.
+  if (orphanCodes > 0 && prose) {
+    return `${orphanCodes} fault code${orphanCodes === 1 ? '' : 's'} mentioned, in running prose rather than a table — ` +
+      'nothing in an article is read as a remedy; the manual\'s own fault table is what to paste';
+  }
   if (orphanCodes > 0) {
     return `${orphanCodes} fault code${orphanCodes === 1 ? '' : 's'} seen, none with remedies beneath them — ` +
       'this looks like the right page in a layout I cannot read (remedies in a column to the right?)';
@@ -521,7 +538,7 @@ function parse({ model, equipment = model, text, sourceName = 'manual' }) {
     found,
     // Meant to be shown, not logged. Two codes recovered from a 90-page manual is a thin graph, and
     // a caller that does not say so implies it read the whole book.
-    coverage: coverageOf(found, orphanCodes),
+    coverage: coverageOf(found, orphanCodes, isProse(text)),
     /*
      * Codes that matched but carried no remedies. This is the difference between the two ways a
      * parse comes back empty, and they need different things from the person holding the manual:

@@ -135,7 +135,9 @@ parse({ text: columnsMadeOfSpaces }).coverage
 
 A wrong page means go and find the fault table. A layout it cannot read means you are already
 looking at the right page — and reporting that as "nothing usable found" sends somebody hunting for
-something in their hands. `orphanCodes` carries the count, and `orphans` the codes themselves.
+something in their hands. `orphanCodes` carries the count, and `orphans` the codes themselves. An article that only
+mentions codes in its paragraphs says so, rather than blaming the layout: nothing in prose is read
+as a remedy.
 
 A table whose columns reached the text as **delimiters** is read: pipes, tabs, or a markdown table.
 Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends,
@@ -407,7 +409,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 59 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 60 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
