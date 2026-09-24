@@ -780,4 +780,9 @@ it('a CSV export is read — commas or semicolons — and a sentence starting "E
   assert.notEqual(prose.codes.E24?.meaning, 'the drain error', 'one sentence was read as a CSV row');
 });
 
+it('a code cell written "E 24", with a space, is E24', () => {
+  const g = parse('Code\tMeaning\tRemedy\nE 24\tWater cannot drain\tCheck the drain filter\nE 25\tPump blocked\tRemove the pump cover');
+  assert.deepEqual(Object.keys(g.codes), ['E24', 'E25']);
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

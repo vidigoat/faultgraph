@@ -291,7 +291,8 @@ function expandDelimitedRows(lines) {
     if (!sep && line.trim()) columns = null;
     const header = columns && cells.length === columns.width ? columns : null;
     const codeAt = header && header.code >= 0 ? header.code : 0;
-    const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec(cells[codeAt]) : null;
+    // "E 24" in a cell is E24: a table's narrow code column often puts a space after the letter.
+    const code = cells.length >= 2 ? /^([A-Za-z]{0,3}[:\-]?\d{1,3}[A-Za-z]?)$/.exec((cells[codeAt] || '').replace(/^([A-Za-z]{1,3}) (?=\d)/, '$1')) : null;
     if (!code && cells.length >= 3 && cells.some((c) => /mean|descr|cause|fix|remed|solution/i.test(c))) {
       const roles = cells.map(role);
       // "DIY Fix?" is the fix column only when there is no plainer one.
