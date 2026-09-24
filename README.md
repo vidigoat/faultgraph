@@ -138,13 +138,21 @@ looking at the right page — and reporting that as "nothing usable found" sends
 something in their hands. `orphanCodes` carries the count.
 
 A table whose columns reached the text as **delimiters** is read: pipes, tabs, or a markdown table.
-Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends and
-semicolons, in the manual's order — and every cause cites the row it came from. What still defeats
+Each row becomes a code, its meaning and its remedies — the remedy cell split at sentence ends,
+semicolons, bullets and "1. … 2. …", in the manual's order — and every cause cites the row it came
+from. A row with its code cell left empty continues the code above it, as a merged cell prints. What still defeats
 it is columns made of nothing but spacing, which is what that message is for. A header row, when there
 is one, decides which column is which: "Common Cause" is the cause, "Fix" is the remedy, and a "DIY?"
 column is neither. On two real error-code pages copied out of a browser, that recovered 11 of 15
 codes (the other four rows were technician-only, and are counted as seen) and 3 of 14 on a page
-whose only "fix" column says who should do the work rather than what to do.
+whose only "fix" column says who should do the work rather than what to do. A header holds for its
+own table only; a row of another width is read by position.
+
+Outside tables, a remedy is recognised by its verb. Words that are as often nouns — "drain",
+"tilt", "empty" — count only as an instruction's first word, so "Drain pump blocked" stays a reason
+and "Tilt the machine to drain the base" is a remedy. A cause the manual names before a colon
+("Blocked filter: clean the filter") is the label, and "Cause: … Remedy: …" on one line is read
+as the two lines it stands for.
 
 This matters because the output is meant to be **acted on** — somebody opening a machine, or
 spending money on a part. A plausible-sounding invented remedy is worse than no answer at all. So:
