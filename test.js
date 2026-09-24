@@ -712,4 +712,21 @@ it('a cause the manual names before a colon is the label; a "Note:" is not a cau
   assert.equal(g.codes.E24.causes[0].remedy, 'Blocked filter: clean the filter.', 'the remedy must stay as printed');
 });
 
+it('a verb that is also a noun is a remedy only as an instruction — "Drain pump blocked" is a reason', () => {
+  const g = parse('E24   Water cannot drain\nDrain pump blocked\nClean the drain pump.\nTilt sensor faulty\nTilt machine to drain the base.');
+  assert.deepEqual(g.codes.E24.causes.map((c) => [c.label, c.remedy]), [
+    ['Drain pump blocked', 'Clean the drain pump.'],
+    ['Tilt sensor faulty', 'Tilt machine to drain the base.'],
+  ]);
+});
+
+it('steps in one cell — numbered, bulleted — and a row continuing the code above are all read', () => {
+  const numbered = parse('Code\tMeaning\tRemedy\nE24\tWater cannot drain\t1. Clean the filter 2. Straighten the drain hose');
+  assert.deepEqual(numbered.codes.E24.causes.map((c) => c.remedy), ['Clean the filter', 'Straighten the drain hose']);
+  const bulleted = parse('Code\tMeaning\tRemedy\nE24\tWater cannot drain\t• Clean the filter • Straighten the drain hose');
+  assert.equal(bulleted.codes.E24.causes.length, 2);
+  const merged = parse('Code\tMeaning\tCause\tFix\nE24\tWater cannot drain\tFilter blocked\tClean the filter\n\tWater cannot drain\tDrain hose kinked\tStraighten the hose');
+  assert.deepEqual(merged.codes.E24.causes.map((c) => [c.label, c.source.line]), [['Filter blocked', 2], ['Drain hose kinked', 3]]);
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

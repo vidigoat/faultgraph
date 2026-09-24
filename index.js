@@ -104,7 +104,22 @@ const CODE_LINE = { test: (line) => matchCodeLine(line) !== null };
 /** Words that mark a line as describing a remedy rather than a symptom. */
 // Grown from real error-code pages: "Turn off water supply; tilt machine to drain base", "Run
 // dishwasher cleaner / descaler" were remedies this did not recognise, so their codes were dropped.
-const REMEDY_HINTS = /\b(check|clean|clear|replace|inspect|remove|tighten|straighten|reset|ensure|lock|install|unscrew|descal\w*|refill|arrange|turn (?:off|on)|switch (?:off|on)|unplug|tilt|drain|flush|reconnect|re-?seat|fix|repair|close|run a|run the|run dishwasher|restart|empty)\b/i;
+const ANY_REMEDY = /\b(check|clean|clear|replace|inspect|remove|tighten|straighten|reset|ensure|lock|install|unscrew|descal\w*|refill|arrange)\b/i;
+/*
+ * Verbs that are as often nouns — "drain hose kinked", "tilt sensor faulty", "fix not holding" —
+ * count only as the line's first word, and then only when the line is not describing a state.
+ * Anywhere, they made a stated reason into a remedy.
+ */
+const PLAIN_LEAD = /^(turn (?:off|on)|switch (?:off|on)|unplug|reconnect|re-?seat|restart)\b/i;
+const AMBIGUOUS_LEAD = /^(tilt|drain|flush|fix|repair|close|run|empty)\b/i;
+const A_STATE = /\b(blocked|kinked|faulty|failed|failure|defective|damaged|loose|dirty|clogged|full|stuck|broken|missing|worn|leaking|fault|error|not \w+)\b/i;
+function leadingInstruction(text) {
+  const t = String(text).replace(/^[\s\-•*·–]*(?:\d+[.)]\s*)?(?:please\s+)?/i, '');
+  return PLAIN_LEAD.test(t) || (AMBIGUOUS_LEAD.test(t) && (/^\S+\s+(the|a|an|it|them|all|any|your)\b/i.test(t) || !A_STATE.test(t)));
+}
+const REMEDY_HINTS = { test: (text) => ANY_REMEDY.test(text) || leadingInstruction(text) };
+/** "Drain the water" is an instruction; "Drain hose kinked" is a reason. */
+const isInstruction = (text) => ANY_REMEDY.test(String(text).split(/\s+/)[0]) || leadingInstruction(text);
 
 /**
  * Rough cost of asking a person to do the thing described. Drives information gain.
@@ -169,7 +184,7 @@ function remedyToCause(remedy) {
   // "Note: check the filter" did not: a heading word before the colon is not a cause.
   const stated = /^([^:]{3,60}):\s+(.+)$/.exec(text);
   if (stated && /^(note|tip|important|remedy|solution|fix|action|what to do)$/i.test(stated[1].trim())) return remedyToCause(stated[2]);
-  if (stated && REMEDY_HINTS.test(stated[2].split(/\s+/).slice(0, 2).join(' ')) && !REMEDY_HINTS.test(stated[1].split(/\s+/)[0])
+  if (stated && REMEDY_HINTS.test(stated[2].split(/\s+/).slice(0, 2).join(' ')) && !isInstruction(stated[1])
     && !/^(note|tip|important|caution|warning|danger|attention|step\b|then|first|remedy|solution|fix|action|what to do)/i.test(stated[1])) {
     return tidy(stated[1]);
   }
@@ -216,6 +231,7 @@ function expandDelimitedRows(lines) {
    * ("Pro") became a cause. A header naming the columns is followed; without one, position is.
    */
   let columns = null;
+  let lastCode = null;
   const role = (h) => {
     const t = h.toLowerCase();
     if (/(^|\b)(code|error|fault code|display)(\b|$)/.test(t) && !/mean|descr/.test(t)) return 'code';
@@ -227,7 +243,8 @@ function expandDelimitedRows(lines) {
   };
   lines.forEach((line, i) => {
     const sep = line.includes('\t') ? '\t' : line.includes('|') ? '|' : null;
-    const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(c === '' && (k === 0 || k === all.length - 1))) : [];
+    // Only a markdown row has pipes at its edges; a tab row's empty first cell is a real, empty cell.
+    const cells = sep ? line.split(sep).map((c) => c.trim()).filter((c, k, all) => !(sep === '|' && c === '' && (k === 0 || k === all.length - 1))) : [];
     // A header holds for its own table only: a line that is not a row ends it, and a row of a
     // different width belongs to some other table, read by position.
     if (!sep && line.trim()) columns = null;
@@ -241,19 +258,25 @@ function expandDelimitedRows(lines) {
       const fix = fixes.find((k) => !/diy|\?$/i.test(cells[k])) ?? fixes[0];
       columns = { width: cells.length, code: roles.indexOf('code'), meaning: roles.indexOf('meaning'), cause: roles.indexOf('cause'), fix: fix ?? -1 };
     }
-    if (!code || NOT_A_CODE.has(code[1].toUpperCase())) { out.push(line); origin.push(i); return; }
+    // A row with its code cell left empty continues the code above it, as merged cells print.
+    const continues = !code && header && lastCode && cells[codeAt] === '' && cells.some(Boolean);
+    if (!continues && (!code || NOT_A_CODE.has(code[1].toUpperCase()))) { if (line.trim()) lastCode = null; out.push(line); origin.push(i); return; }
     const pick = (k) => (k != null && k >= 0 ? cells[k] || '' : '');
     const meaning = header && header.meaning >= 0 ? pick(header.meaning) : cells[1] || '';
     const rest = header ? [pick(header.cause), pick(header.fix)].filter(Boolean) : cells.slice(2);
-    out.push(`${code[1]}   ${meaning}`);
-    origin.push(i);
+    if (!continues) {
+      lastCode = code[1];
+      out.push(`${code[1]}   ${meaning}`);
+      origin.push(i);
+    }
     // With a cause column the row is a three-column table — reason, then action — and the parser
     // pairs them one line each, so the fix cell stays whole. Without one, the remedy cell is the
     // manual's ordered list, split into its steps.
     const whole = header && header.cause >= 0;
     for (const cell of rest) {
-      const parts = whole ? [cell] : cell.split(/(?<=[.!?])\s+|;\s*/);
-      for (const remedy of parts.map((r) => r.trim()).filter((r) => r.length > 3)) {
+      // Steps inside one cell: sentences, semicolons, bullets, or "1. … 2. …".
+      const parts = whole ? [cell] : cell.split(/(?<=[.!?])\s+|;\s*|\s*[•·]\s*|\s+(?=\d{1,2}[.)]\s)/);
+      for (const remedy of parts.map((r) => r.replace(/^\d{1,2}[.)]\s+/, '').trim()).filter((r) => r.length > 3)) {
         out.push(remedy.charAt(0).toUpperCase() + remedy.slice(1));
         origin.push(i);
       }
