@@ -135,9 +135,9 @@ parse({ text: columnsMadeOfSpaces }).coverage
 
 A wrong page means go and find the fault table. A layout it cannot read means you are already
 looking at the right page — and reporting that as "nothing usable found" sends somebody hunting for
-something in their hands. `orphanCodes` carries the count, and `orphans` the codes themselves. An article that only
-mentions codes in its paragraphs says so, rather than blaming the layout: nothing in prose is read
-as a remedy.
+something in their hands. `orphanCodes` carries the count, and `orphans` the codes themselves.
+An article that only mentions codes in its paragraphs says so, rather than blaming the layout:
+nothing in prose is read as a remedy.
 
 A table whose columns reached the text as **delimiters** is read: pipes, tabs, a markdown table, or a
 CSV export (commas or semicolons; a quoted cell may hold commas). A quoted cell spanning several
