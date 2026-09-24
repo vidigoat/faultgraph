@@ -125,4 +125,20 @@ it('it does not promise anything the library refuses to do', () => {
     'README: "it does not read PDFs or images"');
 });
 
+it('the 30-second quick start runs as written and says what its comments say', () => {
+  const block = /```js\n\/\/ quick start\n([\s\S]*?)```/.exec(README);
+  assert.ok(block, 'the README has no quick-start block');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'faultgraph-quickstart-'));
+  const file = path.join(dir, 'quick.js');
+  // Run it the way a reader would — require('faultgraph') — with the package resolving to this repo.
+  fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true });
+  fs.symlinkSync(__dirname, path.join(dir, 'node_modules', 'faultgraph'), 'dir');
+  fs.writeFileSync(file, block[1]);
+  const out = execFileSync(process.execPath, [file], { cwd: dir, encoding: 'utf8' });
+  assert.match(out, /1 fault code recovered/);
+  assert.match(out, /Water cannot leave the machine/);
+  assert.match(out, /Check the drain filter for debris\. — did that fix it\?/, `the first question is not the one the README promises:\n${out}`);
+});
+
 console.log(`\n${passed} passed`);

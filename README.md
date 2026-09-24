@@ -12,15 +12,33 @@ Installing from GitHub gets the same thing. (Written this way on purpose: a READ
 block does not work is the fastest way to lose a reader, and "it'll be published soon" is not an
 install command.)
 
+**In 30 seconds** — paste this into a file and run it; the manual page is inline, so nothing else is
+needed:
+
 ```js
-const { parse, spaceFor, next, prune } = require('faultgraph');
+// quick start
+const { parse, spaceFor, next } = require('faultgraph');
+
+const manualPage = `
+E24  Water cannot leave the machine
+Check the drain filter for debris.
+Straighten the drain hose.
+Replace the drain pump if it does not turn.
+`;
 
 const graph = parse({ text: manualPage, sourceName: 'Bosch service manual' });
+console.log(graph.coverage);                // 1 fault code recovered
+console.log(graph.codes.E24.meaning);       // Water cannot leave the machine
 
-graph.coverage            // '2 fault codes recovered'
-graph.codes.E24.meaning   // 'Water cannot leave the machine'
-graph.codes.E24.causes    // ranked, each citing the line it came from
+const { space, tests } = spaceFor(graph, 'E24');
+console.log(space.map((c) => c.label));     // the causes, cheapest and likeliest first
+console.log(next({ space, tests }).test.question); // Check the drain filter for debris. — did that fix it?
 ```
+
+It starts with the cheapest, likeliest check — the filter — and when that is not it, the next
+question is not "replace the drain pump". It is the one the manual hid inside that remedy, *does it
+turn?*, asked before anyone buys a pump, because answering it is free (`examples/diagnose.js` walks
+the whole thing). The README's own test runs this block, so it cannot quietly stop working.
 
 ---
 
@@ -372,7 +390,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 52 checks, no network — plus 29 for symptom tables, 12 for procedures and 7 that check this README
+npm test      # 52 checks, no network — plus 29 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands
