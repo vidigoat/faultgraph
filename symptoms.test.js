@@ -543,4 +543,15 @@ it('a bullet marks a remedy on a page where nothing is indented', () => {
   }
 });
 
+it('a 2024 manual heads the table "Issue", and the table is read', () => {
+  const text = [
+    'Issue                                Cause and troubleshooting',
+    'Tea residue or lipstick marks on     Dishwashing temperature is too low.',
+    'dishware.                            ▶ Select a program with a higher dishwashing temperature.',
+  ].join('\n');
+  const r = readSymptoms({ text, page: 29 });
+  assert.equal(r.found, 1, r.coverage);
+  assert.equal(r.symptoms[0].causes[0].label, 'Dishwashing temperature is too low.');
+});
+
 console.log(`\n${passed} passed`);

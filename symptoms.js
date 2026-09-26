@@ -17,7 +17,8 @@
  */
 
 /** The two headings these tables use. The capture is what fixes the column boundary. */
-const HEADER = /^(\s*)(?:Fault|Problem|Symptom)\s{2,}(Cause and troubleshooting|Cause and remedy|Cause\b.*)$/im;
+// "Issue" is the heading Bosch's 2024+ manuals use; "Malfunction" older Siemens and Gaggenau ones.
+const HEADER = /^(\s*)(?:Fault|Problem|Symptom|Issue|Malfunction)\s{2,}(Cause and troubleshooting|Cause and remedy|Cause\b.*)$/im;
 
 /** `21.1 Disposal of your old appliance` — the manual has moved on to another section. */
 const SECTION_HEADING = /^\s*\d{1,2}\.\d{1,2}\s+[A-Z]/;
