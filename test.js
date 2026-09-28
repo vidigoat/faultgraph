@@ -785,4 +785,27 @@ it('a code cell written "E 24", with a space, is E24', () => {
   assert.deepEqual(Object.keys(g.codes), ['E24', 'E25']);
 });
 
+it('a "Cause: … Remedy: …" line is still paired into one cause after the DoS guard', () => {
+  const g = parse('E24 Water cannot drain\nCause: blocked filter. Remedy: clean the filter.');
+  const causes = g.codes.E24?.causes || [];
+  assert.equal(causes.length, 1, 'the stated cause and its remedy should pair into a single cause');
+  assert.match(causes[0].label.toLowerCase(), /blocked filter/, "the manufacturer's stated cause was lost");
+  assert.match((causes[0].remedy || '').toLowerCase(), /clean the filter/, 'the remedy on the same line was lost');
+});
+
+it('a pathological single line does not hang the parser', () => {
+  // Real manual lines are short; a million-character line is a payload for the backtracking in the
+  // cause/remedy split, which was O(n^2) — ~14s at 200k characters. A per-line cap and a keyword
+  // gate bound it to linear time. A generous ceiling proves the quadratic is gone without flaking.
+  for (const text of [
+    'reason:' + ' '.repeat(1_000_000),
+    'cause: ' + 'x '.repeat(500_000) + ' remedy: y',
+    Array.from({ length: 200 }, () => 'possible cause : ' + 'a'.repeat(3000)).join('\n'),
+  ]) {
+    const s = Date.now();
+    parse(text);
+    assert.ok(Date.now() - s < 2000, `parsing a hostile ${text.length}-char input took ${Date.now() - s}ms — the quadratic is back`);
+  }
+});
+
 console.log(`\n${passed} passed${failures.length ? `, ${failures.length} failed: ${failures.join(', ')}` : ''}`);

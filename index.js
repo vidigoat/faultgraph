@@ -305,7 +305,10 @@ function expandDelimitedRows(lines) {
     if (!continues && (!code || NOT_A_CODE.has(code[1].toUpperCase()))) {
       if (line.trim()) lastCode = null;
       // "Cause: blocked filter. Remedy: clean the filter." — both labels on one line, read as two.
-      const both = !sep && /^\s*((?:possible |probable )?(?:cause|reason)\s*:.+?)\s+((?:remedy|action|solution|what to do)\s*:.+)$/i.exec(line);
+      // The cheap keyword test gates the split regex: its lazy `.+?` backtracks toward quadratic on
+      // a long line, and there is no point paying that on a line with no remedy label to find.
+      const both = !sep && /remedy|action|solution|what to do/i.test(line) && /cause|reason/i.test(line)
+        && /^\s*((?:possible |probable )?(?:cause|reason)\s*:.+?)\s+((?:remedy|action|solution|what to do)\s*:.+)$/i.exec(line);
       for (const part of both ? [both[1], both[2]] : [line]) { out.push(part); origin.push(i); }
       return;
     }
@@ -408,8 +411,14 @@ function coverageOf(found, orphanCodes, prose = false) {
  * fault table on it yields `{}` and says `nothing usable found`, which is a correct answer and the
  * one a guessing parser would never give.
  */
+// A real fault-table line — code, meaning, remedy — is at most a couple of hundred characters. An
+// absurdly long single line is not a manual; it is a payload for the backtracking in the per-line
+// regexes (the cause/remedy split runs a lazy match that is O(n^2) on a long line). Capping each
+// line keeps every real manual whole and bounds the parser to linear time on hostile input.
+const MAX_LINE = 2000;
+
 function parse({ model, equipment = model, text, sourceName = 'manual' }) {
-  const expanded = expandDelimitedRows(String(text).split(/\r?\n/));
+  const expanded = expandDelimitedRows(String(text).split(/\r?\n/).map((l) => (l.length > MAX_LINE ? l.slice(0, MAX_LINE) : l)));
   const lines = joinOrphanCodes(expanded);
   /** Output line index → the line number a reader would count to on the original page. */
   const onPage = (idx) => expanded.origin[lines.origin ? lines.origin[idx] : idx] + 1;
