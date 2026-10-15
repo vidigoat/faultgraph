@@ -1,5 +1,7 @@
 # faultgraph
 
+[![tests](https://github.com/vidigoat/faultgraph/actions/workflows/test.yml/badge.svg)](https://github.com/vidigoat/faultgraph/actions/workflows/test.yml) [![licence: MIT](https://img.shields.io/badge/licence-MIT-0a0a0a)](LICENSE) [![dependencies: zero](https://img.shields.io/badge/dependencies-zero-0a0a0a)](package.json)
+
 **Read the fault-code table out of an equipment service manual and turn it into something you can
 diagnose with.** Zero dependencies, no network, no model.
 
@@ -328,6 +330,27 @@ it, with nothing in the text to say which. Backing off to the nearest space give
 *"Home Connect cannot Home"* and the cause *"Connect set incorrectly."* — wrong in a way that looks
 right. Those rows are skipped, along with the rest of the symptom they belong to, and counted.
 
+**Three-column tables too** — `Problem | Possible Causes | What To Do`, the layout GE prints across
+its dishwashers, washers, dryers, refrigerators and ranges. There the header words are centred over
+the columns and nothing indents, so a new cause begins where a new remedy begins. Read this way, it
+has read the manuals of 343 GE machines into causes with their pages, each one checked against the page
+it cites before it was kept.
+
+**And a second kind of refusal: rows whose words are all on the page but were read wrongly.** A
+check that only asks "is this sentence printed there?" passes them, so the reader marks each one
+`unsure` with its reason instead:
+
+| What it sees | Why it is refused |
+|---|---|
+| a remedy that opens in lower case — *"se high quality rinse agents"* | its start went to the column beside it |
+| a "symptom" that opens with a bracket | an aside from the row above, not a problem anyone has |
+| one phrase read twice as a cause — *"Water drain pump Water drain pump"* | two columns' worth of the same line |
+| one numbered procedure printed beside several causes | step two would be filed under a cause it was never printed for |
+| a page whose text layer is font-scrambled — `(LWKHURUERWKFRQWUROVVHWWR2))` | the whole page is refused, not decoded |
+
+A page number trailing a symptom (*"Cloudiness on glassware 14"*) is simply dropped; a code like
+`E 22` is never mistaken for one.
+
 ### `procedures` — following "see Page N"
 
 A troubleshooting table points rather than explains: *"Clean the Filters, Page 35."* Read aloud to
@@ -413,7 +436,7 @@ rest refused by reason — and the kept ten read by a person before anything use
 ## Tests
 
 ```bash
-npm test      # 65 checks, no network — plus 30 for symptom tables, 12 for procedures and 8 that check this README
+npm test      # 65 checks, no network — plus 47 for symptom tables, 12 for procedures and 8 that check this README
 ```
 
 The four worth reading first are the ones that check what the library is *for*: every citation lands

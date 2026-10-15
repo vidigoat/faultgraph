@@ -1,6 +1,6 @@
 {
   "name": "faultgraph",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Read the troubleshooting table out of an equipment service manual — keyed on a fault code or on a described symptom — and turn it into a diagnosable graph. Zero dependencies.",
   "license": "MIT",
   "type": "commonjs",

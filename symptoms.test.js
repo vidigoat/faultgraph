@@ -12,7 +12,7 @@
  */
 
 const assert = require('node:assert');
-const { readSymptoms, columnBoundary } = require('./index');
+const { readSymptoms, columnBoundary } = require('./symptoms');
 
 let passed = 0;
 const it = (name, fn) => {
@@ -410,6 +410,79 @@ it('two full-width lines in a row end it too', () => {
   assert.equal(readSymptoms({ text: page, sourceName: 'x' }).symptoms.length, 1);
 });
 
+it('a bullet marks a remedy on a page where nothing is indented', () => {
+  /*
+   * From a Siemens oven, page 5. Its whole right column is flush with the boundary and every
+   * remedy is prefixed with ▶ instead:
+   *
+   *     The cookware or       There has been a power cut.
+   *     food is not heating   ▶ Check whether the lighting in your room or other appliances are working.
+   *     up.
+   *                           The appliance is switched off.
+   *                           ▶ Switch the appliance on.
+   *
+   * With nothing indented, the indent rule read all four lines as one cause and glued them into a
+   * single label — two causes and two remedies in one sentence, which is a confident piece of
+   * nonsense of exactly the kind this parser exists to refuse.
+   *
+   * The marker is the grammar on that page, the same way indentation is on a Bosch one.
+   */
+  const page = [
+    'Fault' + ' '.repeat(17) + 'Cause and troubleshooting',
+    'The cookware or' + ' '.repeat(7) + 'There has been a power cut.',
+    'food is not heating' + ' '.repeat(3) + '\u25b6 Check whether the lighting in your room is working.',
+    'up.',
+    ' '.repeat(22) + 'The appliance is switched off.',
+    ' '.repeat(22) + '\u25b6 Switch the appliance on.',
+  ].join('\n');
+
+  const [s] = readSymptoms({ text: page, sourceName: 'x' }).symptoms;
+  assert.equal(s.symptom, 'The cookware or food is not heating up.');
+  assert.equal(s.causes.length, 2, `the causes were glued together: ${JSON.stringify(s.causes.map((c) => c.label))}`);
+  assert.equal(s.causes[0].label, 'There has been a power cut.');
+  assert.equal(s.causes[1].label, 'The appliance is switched off.');
+
+  // And the marker itself is not part of the instruction.
+  assert.equal(s.causes[1].remedies[0], 'Switch the appliance on.');
+  for (const c of s.causes) {
+    for (const r of c.remedies) assert.ok(!/^[\u25b6•]/.test(r), `the bullet survived into a remedy: ${r}`);
+  }
+});
+
+it('a symptom that runs over a line is not split by the full stop in the middle of it', () => {
+  /*
+   * From a Siemens oven, page 13. This is ONE symptom over three lines:
+   *
+   *     The appliance is switched on.        The operation indicator is defective.
+   *     The operation indicator does not        Call Customer Service Page 15.
+   *     light up.
+   *
+   * The first line ends in a full stop, and the sentence-punctuation rule read that as the symptom
+   * being finished — so line two started a new symptom, which came back with no causes at all,
+   * while the cause that belonged to it stayed attached to the half above. Both halves were wrong
+   * and neither looked it.
+   *
+   * A new symptom always begins a new cause. A line whose right column is a remedy, indented under
+   * the cause above, cannot be the start of one.
+   */
+  const page = [
+    'Fault' + ' '.repeat(30) + 'Cause and troubleshooting',
+    'The appliance is switched on.' + ' '.repeat(6) + 'The operation indicator is defective.',
+    'The operation indicator does not' + ' '.repeat(6) + 'Call Customer Service Page 15.',
+    'light up.',
+    '',
+    'The front panel is not aligned.' + ' '.repeat(4) + 'The front panel was not aligned during installation.',
+  ].join('\n');
+
+  const out = readSymptoms({ text: page, sourceName: 'x' });
+  const names = out.symptoms.map((s) => s.symptom);
+
+  assert.equal(names.length, 2, `split into ${names.length}: ${names.join(' / ')}`);
+  assert.match(names[0], /switched on\. The operation indicator does not light up\./);
+  assert.equal(out.symptoms[0].causes.length, 1, 'the cause was orphaned from its symptom');
+  assert.equal(names[1], 'The front panel is not aligned.');
+});
+
 it('but ONE gapless line does not, because a collided row has no gap either', () => {
   // Requiring two consecutive lines is what keeps this from eating the rows the parser is meant to
   // notice and refuse.
@@ -466,84 +539,8 @@ it('a row whose causes could not be read is dropped and counted', () => {
   assert.match(r.coverage, /nothing readable/);
 });
 
-it('empty input is empty, not a crash', () => {
-  for (const t of ['', null, undefined]) {
-    assert.equal(readSymptoms({ text: t }).found, 0);
-  }
-});
-
-it('a symptom that runs over a line is not split by the full stop in the middle of it', () => {
-  /*
-   * From a Siemens oven, page 13. ONE symptom over three lines:
-   *
-   *     The appliance is switched on.        The operation indicator is defective.
-   *     The operation indicator does not        Call Customer Service Page 15.
-   *     light up.
-   *
-   * The first line ends in a full stop, and sentence punctuation is what tells a finished symptom
-   * from a wrapped one — so line two started a NEW symptom, which came back with no causes at all,
-   * while the cause that belonged to it stayed attached to the half above.
-   *
-   * A new symptom always begins a new cause. A line whose right column is a remedy, indented under
-   * the cause above, cannot be the start of one.
-   */
-  const page = [
-    'Fault' + ' '.repeat(30) + 'Cause and troubleshooting',
-    'The appliance is switched on.' + ' '.repeat(6) + 'The operation indicator is defective.',
-    'The operation indicator does not' + ' '.repeat(6) + 'Call Customer Service Page 15.',
-    'light up.',
-    '',
-    'The front panel is not aligned.' + ' '.repeat(4) + 'The front panel was not aligned during installation.',
-  ].join('\n');
-
-  const out = readSymptoms({ text: page, sourceName: 'x' });
-  const names = out.symptoms.map((s) => s.symptom);
-
-  assert.equal(names.length, 2, `split into ${names.length}: ${names.join(' / ')}`);
-  assert.match(names[0], /switched on\. The operation indicator does not light up\./);
-  assert.equal(out.symptoms[0].causes.length, 1, 'the cause was orphaned from its symptom');
-  assert.equal(names[1], 'The front panel is not aligned.');
-});
-
-it('a bullet marks a remedy on a page where nothing is indented', () => {
-  /*
-   * From a Siemens oven, page 5. Its whole right column is flush with the boundary and every
-   * remedy is prefixed with ▶ instead:
-   *
-   *     The cookware or       There has been a power cut.
-   *     food is not heating   ▶ Check whether the lighting in your room is working.
-   *     up.
-   *                           The appliance is switched off.
-   *                           ▶ Switch the appliance on.
-   *
-   * With nothing indented, the indent rule read all four lines as one cause and glued them into a
-   * single label — two causes and two remedies in one sentence, which is a confident piece of
-   * nonsense of exactly the kind this parser exists to refuse. The marker is the grammar on that
-   * page, the same way indentation is on a Bosch one.
-   */
-  const page = [
-    'Fault' + ' '.repeat(17) + 'Cause and troubleshooting',
-    'The cookware or' + ' '.repeat(7) + 'There has been a power cut.',
-    'food is not heating' + ' '.repeat(3) + '\u25b6 Check whether the lighting in your room is working.',
-    'up.',
-    ' '.repeat(22) + 'The appliance is switched off.',
-    ' '.repeat(22) + '\u25b6 Switch the appliance on.',
-  ].join('\n');
-
-  const [s] = readSymptoms({ text: page, sourceName: 'x' }).symptoms;
-  assert.equal(s.symptom, 'The cookware or food is not heating up.');
-  assert.equal(s.causes.length, 2, `the causes were glued: ${JSON.stringify(s.causes.map((c) => c.label))}`);
-  assert.equal(s.causes[0].label, 'There has been a power cut.');
-  assert.equal(s.causes[1].label, 'The appliance is switched off.');
-
-  // And the marker itself is not part of the instruction.
-  assert.equal(s.causes[1].remedies[0], 'Switch the appliance on.');
-  for (const c of s.causes) {
-    for (const r of c.remedies) assert.ok(!/^[\u25b6•]/.test(r), `the bullet survived into a remedy: ${r}`);
-  }
-});
-
 it('a 2024 manual heads the table "Issue", and the table is read', () => {
+  // SHX4AEF5N: a perfectly regular table read as "no column header on this page".
   const text = [
     'Issue                                Cause and troubleshooting',
     'Tea residue or lipstick marks on     Dishwashing temperature is too low.',
@@ -552,6 +549,359 @@ it('a 2024 manual heads the table "Issue", and the table is read', () => {
   const r = readSymptoms({ text, page: 29 });
   assert.equal(r.found, 1, r.coverage);
   assert.equal(r.symptoms[0].causes[0].label, 'Dishwashing temperature is too low.');
+});
+
+it('empty input is empty, not a crash', () => {
+  for (const t of ['', null, undefined]) {
+    assert.equal(readSymptoms({ text: t }).found, 0);
+  }
+});
+
+/*
+ * ── Three columns, side by side ─────────────────────────────────────────────
+ *
+ * Real, from GE's GDT670SYVFS owner's manual (49-4000283 Rev 8), pages 21 and 22, character for
+ * character. The header words are centred over their columns, so the columns have to come from
+ * the rows; and there is no indent to say where a cause begins.
+ */
+const GE_PAGE = [
+  "                                                                                                                                   TROUBLESHOOTING TIPS",
+  "             Problem             Possible Cause                                       What To Do",
+  "  Smart Assist light       A potential problem has           Use the SmartHQ App to identify and troubleshoot the",
+  "  is red                   been detected with your           potential problem. If you are not connected to WiFi,",
+  "                           machine.                          check your display for any codes and call for service.",
+  "  Smart Assist light is    There is a notification           Use the SmartHQ App to follow recommended steps.",
+  "  yellow                   available in the SmartHQ App.",
+  "  Start status indicator   The door was opened or the        Press the Start pad once and close the door within 4",
+  "  light flashing           cycle was interrupted.            seconds to start the dishwasher. Press the Start pad a",
+  "                                                             second time when the dishwasher is running only if you",
+  "                                                             wish to cancel the cycle.",
+  "  Dishwasher BEEPS         This is a reminder that your      Press Start and close the door.",
+  "  once every minute        dishwasher door has been left",
+  "                           open during operation. It will",
+  "                           continue beeping until you",
+  "                           press Start and close the door.",
+  "  Beeping at the end       This is normal. Dishwasher        To turn off the double beep indicator (or re-activate it if",
+  "  of the cycle (on         will beep twice at the end of     it was previously turned off), press the Dry Boost pad 5",
+  "  some models)             the cycle.                        times within 3 seconds. A triple beep will sound to indicate",
+  "                                                             the end-of-cycle beep option has been turned on or off.",
+  "  Dishes and flatware      Ultra-Fine Filter or Fine         See the Care and Cleaning section.",
+  "  not clean                Filter is clogged",
+  "",
+  "                           Low inlet water temperature       Make sure inlet water temperature is correct (see the",
+  "                                                             USING THE DISHWASHER section). Turn on the hot",
+  "                                                             water faucet nearest the dishwasher, let run until the water",
+  "                                                             temperature stops rising. Then start the dishwasher and",
+  "                                                             turn off the faucet. This ensures the entering water is hot.",
+  "                                                             Select Boost if available.",
+  "                           Water pressure is                 Turn on a faucet. Is water coming out more slowly than usual?",
+  "                           temporarily low                   If so, wait until pressure is normal before using your dishwasher.",
+  "                                                             Normal water pressure to the dishwasher should be 20-120 psi.",
+  "                           Air gap or disposer clogged       Clean the air gap or flush the disposer.",
+  "",
+  "                           High drain loop or air gap        Refer to the Installation Instructions for proper drain line",
+  "                           not installed                     installation.",
+  "                           Improper rack loading             Make sure large dishware does not block the detergent",
+  "                                                             dispenser or the wash arms. See the Loading section.",
+  "",
+  "                           Poor performing detergent         Use high quality detergents such as Cascade® Platinum™",
+  "                                                             ActionPacs™ or Bodewell Dishwasher Detergent.",
+  "",
+].join('\n');
+const GE_NEXT = [
+  "TROUBLESHOOTING TIPS",
+  "                             Problem                Possible Cause                                       What To Do",
+  "                       Spots and filming      Extremely hard water              Use high quality rinse agents such as Cascade®",
+  "                       on glasses and                                           Platinum™ Power Dry™ Rinse Aid or Finish® Jet-Dry®",
+  "                       flatware                                                 Rinse Aid to prevent spots and prevent new film build-up.",
+  "                                                                                If water is extremely hard, a softener may be required.",
+  "                                              Low inlet water temperature       Make sure water temperature is at least 120°F (49°C).",
+  "                                              Overloading or improper           Load dishwasher as shown in the Loading section.",
+  "                                              loading of the dishwasher",
+  "                                              Old or damp powder                Make sure detergent is fresh. Use high quality detergents",
+  "                                              detergent                         such as Cascade® Platinum™ ActionPacs™ or Bodewell",
+  "                                                                                Dishwasher Detergent.",
+  "                                              Rinse agent dispenser empty       Refill with high quality rinse agents such as Cascade® Platinum™",
+  "                                                                                Power Dry™ Rinse Aid or Finish® Jet-Dry® Rinse Aid.",
+  "                                              Too little or low performing      Make sure you use the proper amount of highly rated",
+].join('\n');
+
+it('a three-column table is read by position: each cause with the remedy printed beside it', () => {
+  const r = readSymptoms({ text: GE_PAGE, sourceName: 'GE manual', page: 21 });
+  const dirty = r.symptoms.find((s) => s.symptom === 'Dishes and flatware not clean');
+  assert.ok(dirty, `not found among: ${r.symptoms.map((s) => s.symptom).join(' | ')}`);
+  assert.deepEqual(dirty.causes.map((c) => c.label), [
+    'Ultra-Fine Filter or Fine Filter is clogged',
+    'Low inlet water temperature',
+    'Water pressure is temporarily low',
+    'Air gap or disposer clogged',
+    'High drain loop or air gap not installed',
+    'Improper rack loading',
+    'Poor performing detergent',
+  ]);
+  assert.deepEqual(dirty.causes[0].remedies, ['See the Care and Cleaning section.']);
+  assert.equal(dirty.causes[3].remedies[0], 'Clean the air gap or flush the disposer.');
+  assert.equal(dirty.causes[0].source.page, 21);
+});
+
+it('a problem and a cause that both wrap over several lines come back as one of each', () => {
+  const r = readSymptoms({ text: GE_PAGE, sourceName: 'GE manual', page: 21 });
+  const red = r.symptoms[0];
+  assert.equal(red.symptom, 'Smart Assist light is red');
+  assert.equal(red.causes.length, 1);
+  assert.equal(red.causes[0].label, 'A potential problem has been detected with your machine.');
+  // The remedy cell is prose; one sentence is one step.
+  assert.equal(red.causes[0].remedies.length, 2);
+  assert.match(red.causes[0].remedies[0], /^Use the SmartHQ App to identify and troubleshoot the potential problem\.$/);
+  assert.equal(r.symptoms[1].symptom, 'Smart Assist light is yellow');
+});
+
+it('the footer and the running title are not rows', () => {
+  const r = readSymptoms({ text: GE_PAGE, sourceName: 'GE manual', page: 21 });
+  for (const s of r.symptoms) {
+    assert.doesNotMatch(s.symptom, /49-4000283|TROUBLESHOOTING|Rev 8|\d{2}$/, `page furniture was read as a problem: ${s.symptom}`);
+    for (const c of s.causes) assert.doesNotMatch(c.label, /49-4000283|TROUBLESHOOTING/);
+  }
+});
+
+it('the next page sets its columns somewhere else, and is read from its own rows', () => {
+  const r = readSymptoms({ text: GE_NEXT, sourceName: 'GE manual', page: 22 });
+  assert.ok(r.found >= 1, r.coverage);
+  assert.equal(r.symptoms[0].symptom, 'Spots and filming on glasses and flatware');
+  assert.equal(r.symptoms[0].causes[0].source.page, 22);
+});
+
+it('three-column prose with no table header is still not a table', () => {
+  const prose = GE_PAGE.split('\n').filter((l) => !/Problem\s+Possible Cause/.test(l)).join('\n');
+  assert.equal(readSymptoms({ text: prose }).found, 0);
+});
+
+/*
+ * Real, from GE's WJRE5550KWW washer manual, page 8: the dense kind. The first column is headed by
+ * its section ("WATER"), remedies are bulleted, causes carry no full stop, and nothing separates
+ * one row from the next but the bullet beside it.
+ */
+const GE_DENSE = [
+  "                         WATER                      Possible Causes               What To Do",
+  "                         Water level seems low      This is normal                • Water may not cover the top level of the clothes.",
+  "                                                                                    This is normal for this high-efficiency washer.",
+  "                         Water fills and drains     Drain stand pipe is too low   • The drain stand pipe must be above 30\".",
+  "                         at the same time",
+  "                         Too many suds              Too much detergent            • Measure your detergent carefully. Use less soap if you have",
+  "                                                                                    soft water, a smaller load or a lightly soiled load.",
+  "                                                    Type of detergent             • Switch to HE     detergent.",
+  "                                                    Soft water                    • Try less detergent.",
+  "",
+  "",
+  "",
+  "",
+  "Operating Instructions",
+  "                         Water leaks                Using too much detergent      • Use less detergent. Use less soap if you have soft water,",
+  "                                                    in washer                       a smaller load or a lightly soiled load.",
+  "                                                    Type of detergent             • Switch to HE     detergent.",
+  "                                                    Fill hoses or drain hose is   • Make sure hose connections are tight at faucets and",
+  "                                                    improperly connected            rubber washers are installed. Make sure end of drain hose",
+  "                                                                                    is correctly inserted in and secured to drain facility.",
+  "                                                    Household drain may           • Check household plumbing. You may need to call",
+  "                                                    be clogged                      a plumber.",
+  "                                                    Constant water pressure       • Tighten hoses at the faucets and turn the water off after",
+  "                                                    to the fill hoses at the        each use.",
+  "                                                    water source                  • Check condition of the fill hoses; they should be replaced",
+  "                                                                                    every 5 years.",
+  "                         Water temperature          Cooler water temperatures     • New laundry detergents have been formulated to work",
+  "                         seems incorrect            provide improved energy         with cooler water temperatures without affecting wash",
+  "",
+  "",
+  "",
+  "",
+  "Troubleshooting Tips",
+  "                                                    efficiency                      performance.",
+  "                                                    Water supply is turned off    • Turn both hot and cold faucets fully on and make sure",
+  "                                                    or improperly connected         hoses are connected to correct faucets.",
+  "                                                    Water valve screens are       • Turn off the water source and remove the water connection",
+  "                                                    stopped up                      hoses from the upper back of the washer. Use a brush or",
+  "                                                                                    toothpick to clean the screens in the machine. Reconnect",
+  "                                                                                    the hoses and turn the water back on.",
+  "                                                    House water heater is         • Make sure house water heater is delivering water at",
+  "                                                    not set properly                120°F–140°F (48°C–60°C).",
+  "                         Water pumped out before Lid lifted or cycle was put in   • Reset cycle.",
+  "                         cycle is complete       pause for over 24 hours",
+  "                         Water won’t drain          Drain hose is kinked or       • Straighten drain hose and make sure washer is not",
+].join('\n');
+
+it('a table headed by its section — WATER | Possible Causes | What To Do — is a table', () => {
+  const r = readSymptoms({ text: GE_DENSE, sourceName: 'GE manual', page: 8 });
+  assert.ok(r.found >= 5, r.coverage);
+  assert.equal(r.symptoms[0].symptom, 'Water level seems low');
+});
+
+it('causes on consecutive lines with no full stop are separate rows, each with the remedy beside it', () => {
+  // The first version read "Type of detergent Soft water" as one cause, with both remedies under
+  // it — and the page check passed it, because those words ARE printed one after the other.
+  const r = readSymptoms({ text: GE_DENSE, sourceName: 'GE manual', page: 8 });
+  const suds = r.symptoms.find((s) => s.symptom === 'Too many suds');
+  assert.deepEqual(suds.causes.map((c) => c.label), ['Too much detergent', 'Type of detergent', 'Soft water']);
+  assert.deepEqual(suds.causes[2].remedies, ['Try less detergent.']);
+  const leaks = r.symptoms.find((s) => s.symptom === 'Water leaks');
+  assert.ok(leaks.causes.some((c) => c.label === 'Fill hoses or drain hose is improperly connected'));
+  for (const s of r.symptoms) for (const c of s.causes) assert.doesNotMatch(c.remedies.join(' '), /[•▪]/, 'a bullet was kept as part of a step');
+});
+
+it('a row whose columns ran together is dropped whole — it is not cut at a space that happens to be there', () => {
+  // "Water pumped out before Lid lifted or cycle was put in": nothing straddles the column edge,
+  // so the first check missed it and gave "lifted or cycle was put in" to the cause on the row above.
+  const r = readSymptoms({ text: GE_DENSE, sourceName: 'GE manual', page: 8 });
+  assert.ok(r.collided >= 1, 'the collision was not noticed');
+  for (const s of r.symptoms) {
+    assert.doesNotMatch(s.symptom, /pumped out before/, 'half of a collided row was kept as a problem');
+    for (const c of s.causes) assert.doesNotMatch(c.label, /lifted or cycle|pause for over/, 'a collided row leaked into the cause above it');
+  }
+  const temp = r.symptoms.find((s) => s.symptom === 'Water temperature seems incorrect');
+  assert.equal(temp.causes.at(-1).label, 'House water heater is not set properly');
+  // …and the next clean problem is read normally.
+  assert.ok(r.symptoms.some((s) => /Water won.t drain/.test(s.symptom)));
+});
+
+it('the thumb-tab down the page edge is not part of any row', () => {
+  const r = readSymptoms({ text: GE_DENSE, sourceName: 'GE manual', page: 8 });
+  const all = JSON.stringify(r.symptoms);
+  assert.doesNotMatch(all, /Troubleshooting Tips|Operating Instructions/);
+});
+
+/* Real, from GE's DCSR483GAWW dryer manual, page 11. */
+const GE_DRYER = [
+  "Problem                       Possible Causes                       What To Do",
+  "Dryer doesn’t start           Dryer is unplugged                    • Make sure the dryer plug is pushed completely into",
+  "                                                                      the outlet.",
+  "                              Fuse is blown/circuit breaker         • Check the house fuse/circuit breaker box and replace",
+  "                              is tripped                              fuse or reset breaker. NOTE: Most electric dryers use",
+  "                                                                      2 fuses/breakers.",
+  "",
+  "Dryer doesn’t heat            Fuse is blown/circuit breaker is      • Check the house fuse/circuit breaker box and replace",
+  "                              tripped, the dryer may tumble           both fuses or reset both breakers. Your dryer may tumble",
+  "",
+  "",
+  "",
+  "",
+  "                                                                                                                                       Operating Instructions",
+  "                              but not heat                            if only one fuse is blown or one breaker tripped.",
+  "                              Gas service is off                    • Make sure gas shutoff at dryer and main shutoff are",
+  "                                                                      fully open.",
+  "",
+  "Dryer shakes or               Some shaking/noise is normal.         • Move dryer to an even floor space, or adjust leveling legs",
+  "makes noise                   Dryer may be sitting unevenly           as necessary until even.",
+].join('\n');
+
+it('two sentences in one cause cell, beside one remedy that runs across both lines, are one row', () => {
+  const r = readSymptoms({ text: GE_DRYER, sourceName: 'GE manual', page: 11 });
+  const shakes = r.symptoms.find((s) => /shakes/.test(s.symptom));
+  assert.ok(shakes, r.symptoms.map((s) => s.symptom).join(' | '));
+  assert.equal(shakes.causes.length, 1, 'a remedy still in mid-sentence was split between two causes');
+  assert.match(shakes.causes[0].remedies.join(' '), /adjust leveling legs as necessary until even\.$/);
+});
+
+it('a capital folded into the cause above, with nothing to say it belongs there, is marked unsure', () => {
+  // Is "Old detergent" a second cause, or the end of the first? The page does not say: the line
+  // above ends on an ordinary word, and no remedy starts beside it.
+  const page = [
+    'Problem                 Possible Causes                 What To Do',
+    'Spots on glasses        Extremely hard water            Use a rinse agent to remove spots.',
+    '                        Old detergent',
+  ].join('\n');
+  const c = readSymptoms({ text: page }).symptoms[0].causes[0];
+  assert.ok(c.unsure, 'an ambiguous join was presented as certain');
+  assert.equal(c.suspect, true);
+});
+
+it('a name broken across the line is one cause, and is not in doubt', () => {
+  // "Ultra-Fine Filter or Fine / Filter is clogged", "the Dry / Boost option": the line above ends
+  // on a capitalised word mid-phrase, or on a word that cannot end one.
+  for (const [first, second, whole] of [
+    ['Ultra-Fine Filter or Fine', 'Filter is clogged', 'Ultra-Fine Filter or Fine Filter is clogged'],
+    ['This is normal when the Dry', 'Boost option is used.', 'This is normal when the Dry Boost option is used.'],
+    ['The door was opened by', 'Someone during the cycle', 'The door was opened by Someone during the cycle'],
+  ]) {
+    const page = ['Problem                 Possible Causes                 What To Do',
+      `Dishes not clean        ${first.padEnd(32)}See the Care and Cleaning section.`,
+      `                        ${second}`].join('\n');
+    const c = readSymptoms({ text: page }).symptoms[0].causes[0];
+    assert.equal(c.label, whole);
+    assert.ok(!c.unsure, `"${first} / ${second}" was put in doubt`);
+  }
+});
+
+/* Real, from GE's GNE27JSMSS refrigerator manual, page 45: one cause extracts as scrambled capitals. */
+const GE_SCRAMBLED = [
+  " Problem                                      Possible Causes                             What to Do",
+  " Refrigerator does not operate                Refrigerator in defrost cycle.              Wait about 30 minutes for defrost cycle to end.",
+  "                                              (LWKHU\u0003RU\u0003ERWK\u0003FRQWUROV\u0003VHW\u0003WR\u00032))\u0011\u0003        Set the controls to a lower temperature setting.",
+  "                                              Refrigerator is unplugged.                  Push the plug completely into the outlet.",
+  "                                              The fuse is blown/circuit breaker is        Replace fuse or reset the breaker.",
+].join('\n');
+
+it('a page whose text layer is font-scrambled in places is refused whole, and says why', () => {
+  // Two rows as that page's text layer really gives them: "Either or both controls set to OFF"
+  // and "Refrigerator or freezer compartment", each extracted at the wrong codepoints.
+  const padded = [GE_SCRAMBLED,
+    `${' '.repeat(46)}${'(LWKHURUERWKFRQWUROVVHWWR2))'.padEnd(40)}Set the controls to a lower temperature setting.`,
+    ` ${'5HIULJHUDWRURUIUHH]HUFRPSDUWPHQW'.padEnd(45)}${'Temperature control not set cold'.padEnd(40)}See Controls section.`].join('\n');
+  const r = readSymptoms({ text: padded, sourceName: 'GE manual', page: 45 });
+  assert.equal(r.found, 0);
+  assert.ok(r.mangled > 0);
+  assert.match(r.coverage, /font-scrambled/);
+});
+
+it('one numbered procedure printed beside several causes puts every one of them in doubt', () => {
+  // Shaped as GE's GSD4800 prints "Spots and filming": the steps run on past the cause they began beside.
+  const page = [
+    'Problem                 Possible Causes                 What To Do',
+    'Spots and filming       Extremely hard water            • Use a rinse agent to remove spots.',
+    'on glasses              Low inlet water temperature     • To remove stubborn spots from glassware:',
+    '                        Overloading the dishwasher      1 Remove all metal utensils from the dishwasher.',
+    '                        Improper loading                2 Do not add detergent.',
+    '                        Old or damp powder detergent    3 Select the longest cycle.',
+    'Steam                   This is normal                  • Steam comes through the vent during drying.',
+  ].join('\n');
+  const r = readSymptoms({ text: page });
+  const spots = r.symptoms.find((s) => /Spots/.test(s.symptom));
+  assert.ok(spots.causes.length >= 3);
+  assert.ok(spots.causes.every((c) => c.unsure), 'a step of a shared procedure was filed under one cause as its remedy');
+  // The next problem is its own row and is not in doubt.
+  assert.ok(!r.symptoms.find((s) => s.symptom === 'Steam').causes[0].unsure);
+});
+
+it('a cause whose words stop mid-phrase is in doubt', () => {
+  const page = ['Problem                 Possible Causes                 What To Do',
+    'Start status            The door was opened or the      Press the Start button once and close the door.'].join('\n');
+  assert.ok(readSymptoms({ text: page }).symptoms[0].causes[0].unsure);
+});
+
+// One table row with each column where the header puts it.
+const row = (a, b, c) => `${a.padEnd(32)}${b.padEnd(32)}${c}`;
+
+it('a page reference after a symptom is not part of the problem; a code is never mistaken for one', () => {
+  const page = [row('Problem', 'Possible Causes', 'What To Do'),
+    ['Cloudiness on glassware 14', 'Hard water', 'Use a rinse agent.'],
+    ['E 22', 'Filter blocked', 'Clean the filter.'],
+  ].map((r) => (Array.isArray(r) ? row(...r) : r)).join('\n');
+  const r = readSymptoms({ text: page });
+  assert.ok(r.symptoms.some((s) => s.symptom === 'Cloudiness on glassware'), r.symptoms.map((s) => s.symptom).join(' | '));
+  assert.ok(r.symptoms.some((s) => s.symptom === 'E 22'), 'a code lost its number');
+});
+
+it('rows read wrongly from words that ARE on the page are put in doubt, each with its reason', () => {
+  const page = [row('Problem', 'Possible Causes', 'What To Do'),
+    ['Spots on dishes', 'Hard water', 'se high quality rinse agents.'],
+    ['Noise', 'Drain pump Drain pump', 'This is normal.'],
+    ['Runs often', 'Normal operation', 'This is normal.'],
+    ['(Modern models run longer.)', 'Larger freezer', 'This is normal.'],
+  ].map((r) => (Array.isArray(r) ? row(...r) : r)).join('\n');
+  const r = readSymptoms({ text: page });
+  const why = (start) => r.symptoms.find((s) => s.symptom.startsWith(start))?.causes[0].unsure;
+  assert.match(why('Spots') || '', /mid-sentence/);
+  assert.match(why('Noise') || '', /read twice/);
+  assert.match(why('(Modern') || '', /aside/);
+  assert.equal(why('Runs often'), undefined, 'a clean row was put in doubt');
 });
 
 console.log(`\n${passed} passed`);

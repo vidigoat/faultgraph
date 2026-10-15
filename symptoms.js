@@ -1,23 +1,49 @@
-/*
- * ── Symptom-keyed troubleshooting tables ───────────────────────────────────
+/**
+ * The table manufacturers actually print now.
  *
- * Not every manual prints fault codes. Measured across ten CURRENT Bosch US dishwasher manuals
- * fetched from the manufacturer's own site: zero fault codes between them, and ten to thirteen
- * pages each of `Fault | Cause and troubleshooting` keyed on a described symptom. A 2019 European
- * manual for the same kind of machine has ten code mentions. A 482-page self-repair-hints document
- * for a fridge-freezer has none either — it is a disassembly guide.
+ * Every current Bosch US dishwasher manual carries ten to thirteen pages headed
+ * `Fault | Cause and troubleshooting`, and not one of them contains a fault code. Measured across
+ * ten of them: zero code mentions, against ten in the 2019 European manual for the same kind of
+ * machine. The codes moved to repair documentation those models do not publish.
  *
- * So for a lot of equipment the symptom table is not a fallback, it is the only door. It has the
- * same shape as a fault table — a key, its causes, and the remedies under each — and the key is a
- * sentence instead of a code.
+ * So the entry point this project was built on — a code on a panel — matches what Bosch published
+ * in 2019 and not what it publishes now. What it publishes now is keyed on a described symptom:
  *
- * `readSymptoms` is deliberately separate from `parse`. That one is keyed on codes at line starts
- * and has a test suite saying so; a second mode inside it would be how a working thing stops
- * working. The output shape matches, so both feed the same hypothesis space.
+ *   Fault                  Cause and troubleshooting
+ *   Excessive formation of Hand soap got in the rinse aid dispenser.
+ *   foam occurs.              Immediately add rinse aid to the dispenser.
+ *                          Rinse aid has been spilled.
+ *                             Remove the rinse aid with a cloth.
+ *
+ * Which is the same shape. A key, its causes, and the remedy under each cause — and arguably a
+ * commoner way to arrive at the problem, because "all the lights are flashing" is what somebody
+ * says out loud and `E:22` is not.
+ *
+ * ── Why this is its own file ────────────────────────────────────────────────
+ *
+ * `faultgraph` is keyed on codes at line starts and has a test suite that says so. This needs
+ * different key detection and identical cause/remedy handling, and bolting a second mode onto a
+ * tested parser to save a file is how a working thing stops working. The output shape is
+ * deliberately the same, so both can feed the same hypothesis space.
+ *
+ * ── How the columns are read ────────────────────────────────────────────────
+ *
+ * The header line gives the boundary: whatever column `Cause` starts at is where column two
+ * begins. Then, within column two, INDENT is the grammar — flush with the boundary is a cause, and
+ * indented past it is a remedy belonging to the cause above. That is the whole trick, and it is
+ * why `pdftotext -layout` is required: a de-layouted extraction destroys exactly this.
+ *
+ * Both columns wrap, and both hyphenate across the break (`estab-` / `lished.`), so joining is
+ * part of reading rather than a tidy-up afterwards.
  */
 
-/** The two headings these tables use. The capture is what fixes the column boundary. */
-// "Issue" is the heading Bosch's 2024+ manuals use; "Malfunction" older Siemens and Gaggenau ones.
+/**
+ * The headings these tables use. The capture is what fixes the column boundary.
+ *
+ * "Issue" arrived with Bosch's 2024+ manuals (SHX4AEF5N's "Issue · Cause and troubleshooting"): the
+ * table was perfectly regular and read as "no column header on this page" because the word on the
+ * left was not one of three. "Malfunction" is the same table in older Siemens and Gaggenau books.
+ */
 const HEADER = /^(\s*)(?:Fault|Problem|Symptom|Issue|Malfunction)\s{2,}(Cause and troubleshooting|Cause and remedy|Cause\b.*)$/im;
 
 /** `21.1 Disposal of your old appliance` — the manual has moved on to another section. */
@@ -89,7 +115,10 @@ function columnBoundary(lines) {
  */
 function readSymptoms({ text, sourceName = 'service manual', page = null } = {}) {
   const lines = String(text || '').split(/\r?\n/);
-  const boundary = columnBoundary(lines);
+  // Three columns side by side — Problem | Possible Cause | What To Do — is a different table from
+  // the two-column one below, read by position rather than by indent. See readThreeColumns.
+  const three = threeColumnHeader(lines);
+  const boundary = three ? { at: three.cause, line: three.line } : columnBoundary(lines);
 
   if (!boundary) {
     /*
@@ -101,18 +130,38 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
   }
 
   let { at } = boundary;
-  const symptoms = [];
+  const read3 = three ? readThreeColumns(lines, page) : null;
+  const symptoms = read3 ? read3.symptoms : [];
   let current = null;   // the symptom being built
   let cause = null;     // the cause being built, inside it
   let lastKind = null;  // 'cause' | 'remedy' — what the previous right-column line was
   let leftWasBlank = true;
-  let collided = 0;   // rows whose two columns run together and cannot be split
+  let collided = read3 ? read3.collided : 0;   // rows whose two columns run together and cannot be split
   let skipping = false; // inside a symptom whose first row collided, so none of it can be trusted
   let prose = 0;      // consecutive full-width lines: the page has moved past the table
   let lastLeft = null;  // the previous line's left column, for deciding where a skipped symptom ends
 
-  for (let i = boundary.line + 1; i < lines.length; i++) {
-    const raw = lines[i];
+  /*
+   * Which page we are on, as the table crosses page breaks.
+   *
+   * `joinAdjacent` puts a form feed at each seam — `pdftotext`'s own page separator — so counting
+   * them is counting pages. Without this every row in a run carried the number of the page the run
+   * STARTED on: a table running 37 to 48 cited all two hundred of its causes to page 37, and an
+   * owner following one of them would open the manual to the wrong page and find nothing. A
+   * citation that does not survive being checked is worse than no citation, because it was
+   * believed.
+   */
+  let pageNow = page;
+
+  // The two-column reader. A three-column table has already been read, so this loop does not run.
+  for (let i = read3 ? lines.length : boundary.line + 1; i < lines.length; i++) {
+    let raw = lines[i];
+
+    if (raw.includes('\f')) {
+      if (typeof pageNow === 'number') pageNow += raw.split('\f').length - 1;
+      raw = raw.replace(/\f/g, '');
+    }
+
     if (!raw.trim()) { leftWasBlank = true; continue; }
 
     /*
@@ -219,6 +268,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * what "plainly" turned out to have to mean.
      */
     if (cut === null) {
+      if (process.env.SYMPTOMS_DEBUG) console.error(`collided @${cols.cause}/${cols.action}: ${raw.slice(0, 120)}`);
       collided++;
       skipping = true;
       current = null;
@@ -267,21 +317,26 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
       /*
        * Unless the right column says otherwise.
        *
-       * Punctuation alone split a symptom in half on a Siemens oven:
+       * Sentence punctuation alone split a symptom in half on a Siemens oven:
        *
        *     The appliance is switched on.        The operation indicator is defective.
        *     The operation indicator does not        Call Customer Service Page 15.
        *     light up.
        *
        * That is ONE symptom over three lines, and the first line ends in a full stop — so the
-       * second started a new symptom, which then had no causes at all, while the cause that
-       * belonged to it stayed with the half above. Two wrong rows, neither of which looked wrong.
+       * second line started a new symptom, which then had no causes at all, and the cause that
+       * belonged to it stayed with the half above.
        *
-       * A new symptom always begins a new CAUSE; that is what a row in this table is. So a line
-       * whose right column is a remedy — indented, sitting under the cause above — cannot be the
-       * start of one, whatever punctuation the left column happens to end on. Two columns of
-       * indent rather than one, because a single space is the jitter you get when a row's right
-       * column starts a character late; the remedies in these manuals are indented three.
+       * A new symptom always begins a new cause; that is what a row in this table is. So a line
+       * whose right column is a REMEDY — indented, sitting under the cause above it — cannot be
+       * the start of one, whatever punctuation the left column happens to end on.
+       */
+      /*
+       * Two columns of indent, not one. A single space is the jitter you get when a row's right
+       * column happens to start a character late — the remedies in these manuals are indented
+       * three. And only when there is a symptom open to continue: with nothing open, an indented
+       * right column is the first row of a table whose layout starts indented, and it has to
+       * start one.
        */
       const underARemedy = Boolean(current) && indent >= 2 && right;
       const finished = current && /[.!?:]$/.test(current.symptom) && !underARemedy;
@@ -321,15 +376,15 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
      * A Siemens oven sets its whole right column flush and prefixes every remedy with ▶:
      *
      *     The cookware or       There has been a power cut.
-     *     food is not heating   ▶ Check whether the lighting in your room is working.
+     *     food is not heating   ▶ Check whether the lighting in your room or other appliances are working.
      *     up.
      *                           The appliance is switched off.
      *                           ▶ Switch the appliance on.
      *
-     * With nothing indented, the indent rule read four lines as one cause and glued the block into
-     * a single label — two causes and two remedies in one sentence. The marker is the grammar on
-     * that page exactly as indentation is on a Bosch one, and it is the same kind of signal as the
-     * numbered step already handled below.
+     * With nothing indented, the indent rule saw four causes' worth of text as one cause and glued
+     * the whole block into a single label — two causes and two remedies in one sentence. The
+     * marker is the grammar on that page exactly as indentation is on a Bosch one, and it is the
+     * same kind of signal as the numbered step already handled below.
      */
     const bulleted = /^[▶►▸‣•·–—]\s/.test(right);
 
@@ -406,7 +461,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
       if (lastKind === 'cause' && cause) {
         cause.label = joinWrapped(cause.label, right);
       } else {
-        cause = { label: right, remedies: [], line: i };
+        cause = { label: right, remedies: [], line: i, page: pageNow };
         current.causes.push(cause);
       }
       lastKind = 'cause';
@@ -416,7 +471,7 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
       if (!cause) {
         // A remedy with no cause above it. The manual gave a step and no reason; keep it under an
         // unnamed cause rather than dropping a real instruction on the floor.
-        cause = { label: null, remedies: [], line: i };
+        cause = { label: null, remedies: [], line: i, page: pageNow };
         current.causes.push(cause);
       }
       // Remedies wrap too, and a wrapped remedy is not a second remedy.
@@ -463,7 +518,10 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    * dropping first puts them next to each other, which is where they were on the page.
    */
   const dropped = symptoms.filter((s) => !s.causes.length).length + collided;
-  const usable = symptoms.filter((s) => s.causes.length);
+  // A "symptom" that is only a step number ("2.", "3)") is a numbered procedure that sits in the
+  // left column of a later page, not a row of the table. Re-reading a Bosch refrigerator manual
+  // produced three of them, each with a real instruction filed under it as its cause.
+  const usable = symptoms.filter((s) => s.causes.length && !/^\d{1,2}[.)]?$/.test(s.symptom));
 
   for (let k = usable.length - 1; k > 0; k--) {
     if (usable[k].symptom !== usable[k - 1].symptom) continue;
@@ -509,25 +567,93 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
    */
   const looksTruncated = (t) => Boolean(t) && /^[a-z]/.test(String(t).trim());
 
+  /*
+   * Rows the font destroyed.
+   *
+   * Some manuals embed a face whose glyphs extract at the wrong codepoints, for some runs of text
+   * and not others: a GE refrigerator's "Either or both controls set to OFF" comes out of the text
+   * layer as `(LWKHURUERWKFRQWUROVVHWWR2))`, on a page that is otherwise perfectly readable. The
+   * page check cannot catch it — the scrambled string really is what the text layer says — so it
+   * would be admitted as a cause, and read out.
+   *
+   * Scrambled runs have no spaces and no lower case, so they show up as very long capital tokens,
+   * or as capitals with a bracket or backslash in the middle of them. Nothing is decoded or guessed.
+   */
+  const pageWords = String(text || '').split(/\s+/);
+  const scrambledPage = pageWords.filter((w) => w.length >= 16 && !/[a-z]/.test(w) && /[A-Z]{6,}/.test(w) && !/^[-–—_.=*]+$/.test(w)).length >= 2
+    || pageWords.some((w) => /[A-Z]{3,}[\]\[\\][A-Z]{2,}/.test(w));
+  /*
+   * And when a page has them, none of it is kept.
+   *
+   * Dropping only the rows that fail was tried first. What was left read "Refrigerator does not
+   * operate Vibration or rattling" as one problem: with half the rows unreadable, the surviving
+   * ones lose the lines that separated them. A page whose text layer cannot be trusted in places
+   * cannot be trusted for its structure either, so it is refused whole and says why — it wants
+   * reading from the rendered page, not from this text.
+   */
+  let mangled = 0;
+  if (scrambledPage) {
+    mangled = usable.reduce((n, sy) => n + sy.causes.length, 0);
+    usable.length = 0;
+  }
+
+  /*
+   * A page reference printed after a symptom — GE's tables say "Cloudiness on glassware 14",
+   * pointing at the page that explains it. Read out, that is a stray number. It is only stripped
+   * after a lower-case word or a closing bracket: "E 22" is a code, and a code is never touched.
+   */
+  const pageRef = (t) => String(t).replace(/(?<=[a-z’')])\s+\d{1,3}$/, '');
+
+  /*
+   * Rows whose words are all on the page but which were still read wrongly, so the page check —
+   * which asks only whether a sentence is printed there — passes them. Each one is marked unsure
+   * with its reason, and an unsure row is refused by name before it reaches the library:
+   *
+   *   a remedy that opens in lower case lost its start to the column beside it
+   *     ("se high quality rinse agents", "ter after agitation stops");
+   *   a "symptom" that opens with a bracket is an aside from the row above
+   *     ("(Modern refrigerators … require more operating time.)"), not a problem anyone has;
+   *   a cause whose label is one phrase twice ("Water drain pump Water drain pump") is two
+   *     columns' worth of the same line, and the remedy beside it is cut.
+   */
+  const doubled = (t) => {
+    const w = String(t || '').trim().split(/\s+/);
+    const h = w.length / 2;
+    return w.length >= 4 && Number.isInteger(h) && w.slice(0, h).join(' ') === w.slice(h).join(' ');
+  };
+  const doubtOf = (s, c) =>
+    (c.unsure && 'this may be two rows read as one') ||
+    (/^[a-z]/.test(String(c.remedies?.[0]?.text || '').trim()) && 'its remedy begins mid-sentence') ||
+    (/^\(/.test(String(s.symptom).trim()) && 'this is an aside from the row above, not a symptom') ||
+    (doubled(c.label) && 'its cause is one line read twice') ||
+    undefined;
+
   const out = usable.map((s) => ({
     // A stable handle for the row, so a reviewer can accept or reject this symptom by name. The
     // symptom text itself is a sentence and makes a poor key.
-    id: slug(s.symptom),
-    symptom: s.symptom,
+    id: slug(pageRef(s.symptom)),
+    symptom: pageRef(s.symptom),
     suspect: looksTruncated(s.symptom) || undefined,
     causes: s.causes.map((c, k) => ({
-      id: `${slug(s.symptom)}-${k}`,
+      id: `${slug(pageRef(s.symptom))}-${k}`,
       label: c.label,
       // Begins mid-sentence, so the start of it was lost to a column collision. Not repairable
       // here; flagged so a reviewer's eye goes to it.
-      suspect: looksTruncated(c.label) || undefined,
+      suspect: looksTruncated(c.label) || Boolean(doubtOf(s, c)) || undefined,
+      // Why the reader doubts this row, when it does. scripts/verify-against-pages.js refuses it.
+      unsure: doubtOf(s, c),
       // The manual's ordering is the prior: the first cause listed is the commonest.
       likelihood: Number((1 / (k + 1.6)).toFixed(3)),
       // A manual lists remedies, never prices. Null, not zero — zero would mean free.
       cost: null,
       remedies: c.remedies.map((r) => r.text),
-      evidence: `${sourceName}${page ? `, page ${page}` : ''}: "${c.label || c.remedies[0]?.text || ''}"`,
-      source: { line: c.line, manual: sourceName, page },
+      /*
+       * The page THIS cause was printed on, recorded when it was read rather than taken from the
+       * run afterwards. A run spanning pages 37 to 48 has causes on twelve different pages, and
+       * both a first-page and a last-page answer are wrong for almost all of them.
+       */
+      evidence: `${sourceName}${c.page ? `, page ${c.page}` : ''}: "${c.label || c.remedies[0]?.text || ''}"`,
+      source: { line: c.line, manual: sourceName, page: c.page ?? null },
     })),
   }));
 
@@ -536,12 +662,326 @@ function readSymptoms({ text, sourceName = 'service manual', page = null } = {})
     symptoms: out,
     boundary: at,
     dropped,
+    // How many rows the columns ran together on. A caller that can render the page and pay a model
+    // to look at it uses this to decide whether that is worth doing — see mcp/tools/read_symptoms.js.
+    collided,
+    mangled,
     coverage: out.length
       ? `${out.length} symptom${out.length === 1 ? '' : 's'} recovered` +
         (collided ? `, ${collided} row${collided === 1 ? '' : 's'} skipped where the two columns run together` : '') +
-        (dropped - collided > 0 ? `, ${dropped - collided} had no readable cause` : '')
-      : 'a column header, but nothing readable beneath it',
+        (dropped - collided > 0 ? `, ${dropped - collided} had no readable cause` : '') +
+        (mangled ? `, ${mangled} row${mangled === 1 ? '' : 's'} dropped where the text layer is font-scrambled` : '')
+      : mangled
+        ? `this page's text layer is font-scrambled in places (${mangled} rows), so none of it is taken from the text`
+        : 'a column header, but nothing readable beneath it',
   };
+}
+
+/*
+ * ── Three columns, side by side ─────────────────────────────────────────────
+ *
+ * GE, and most North American manuals, print the table as
+ *
+ *        Problem             Possible Cause                 What To Do
+ *   Dishes and flatware   Ultra-Fine Filter or Fine    See the Care and Cleaning section.
+ *   not clean             Filter is clogged
+ *
+ *                         Low inlet water temperature  Make sure inlet water temperature is
+ *                                                      correct. Turn on the hot water faucet…
+ *
+ * which is the same information as the two-column kind — a key, its causes, a remedy for each —
+ * laid out by POSITION instead of by indent: the remedy sits beside its cause, not under it.
+ *
+ * Two things the two-column reader could take from the header, this one cannot:
+ *
+ *   where the columns are   the header words are CENTRED over their columns, so "Possible Cause"
+ *                           begins six characters to the right of the causes beneath it. The
+ *                           columns are found from the rows: within each page, the commonest
+ *                           place a run of text starts, looked for between one header word and
+ *                           the next.
+ *   where a cause begins    there is no indent to say. A line starts a new cause when the cause
+ *                           column begins with a capital AND the entry before it had finished —
+ *                           a blank line, a cause column that had gone quiet while the remedy
+ *                           ran on, or a sentence that ended. A line that starts a new cause with
+ *                           words in the first column as well starts a new problem.
+ *
+ * Every page re-states the header and may set the columns somewhere else, so both are re-read per
+ * page; a page with no header ends the table.
+ */
+/*
+ * The first column is headed "Problem" — or, in GE's laundry manuals, by the section the rows
+ * belong to: `WATER   Possible Causes   What To Do`, then `OPERATION`, `PERFORMANCE`, `SOUNDS`. Any
+ * short heading is accepted there, but only when the other two columns say "Possible Causes" and
+ * what to do about them in so many words; a bare "Cause" needs "Problem" beside it.
+ */
+const HEADER3 = /^\s*(Problem|Symptom|Issue|Fault|[A-Z][A-Za-z&\/ -]{2,28}?(?=\s{2,}(?:Possible|Probable)\s))\s{2,}((?:Possible\s+|Probable\s+)?(?:Causes?|Reasons?))\s{2,}(What To Do|Solutions?|Remed(?:y|ies)|Corrective Action|Action|Fix)\s*$/i;
+
+function threeColumnHeader(lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].replace(/\f/g, '');
+    const m = HEADER3.exec(raw);
+    if (!m) continue;
+    const problem = raw.indexOf(m[1]);
+    const cause = raw.indexOf(m[2], problem + m[1].length);
+    const action = raw.indexOf(m[3], cause + m[2].length);
+    if (cause > problem && action > cause) return { line: i, problem, cause, action };
+  }
+  return null;
+}
+
+/** Where each run of text on a line starts — runs are separated by two spaces or more. */
+function chunkStarts(raw) {
+  const out = [];
+  const re = /\S+(?: \S+)*/g;
+  let m;
+  while ((m = re.exec(raw))) out.push(m.index);
+  return out;
+}
+
+/**
+ * Where a column starts: the LEFTMOST place text commonly begins, not the commonest.
+ *
+ * A remedy cell that lists its steps with bullets wraps two characters in from the bullet, and
+ * there are more wrapped lines than bulleted ones. The commonest start is then the wrap indent —
+ * two characters right of the column's real edge — and every bulleted line reads as a collision.
+ * The column's edge is the leftmost start that is not a one-off.
+ */
+const columnStart = (xs) => {
+  const n = new Map();
+  for (const x of xs) n.set(x, (n.get(x) || 0) + 1);
+  if (!n.size) return null;
+  const top = Math.max(...n.values());
+  return Math.min(...[...n].filter(([, c]) => c >= Math.max(2, top * 0.3) || c === top).map(([x]) => x));
+};
+
+/** Page furniture a table crosses: its own running title, a publication number, a page number. */
+// A footer carries the publication number wherever the page number sits beside it ("22   49-4000283 Rev 8").
+const FURNITURE3 = /troubleshooting tips|before you call for service|\b\d{2}-\d{5,}\S*\s+rev\b|^\s*(?:page\s+)?\d{1,4}\s*$/i;
+// The thumb-tab down the edge of the page ("Operating Instructions", "Troubleshooting Tips"), which
+// the text layer hands back as a line of its own — or as a fragment of one — in whichever column it
+// happens to sit over. It is never part of a row.
+const MARGIN_TAB = /^(?:(?:operating|safety|installation|care and cleaning)(?: instructions)?|consumer support|customer service|trouble(?:shooting)?(?: tips)?|shooting tips|tips|instructions|support)$/i;
+const ENDS = (t) => /[.?!:)”"]$/.test(String(t || '').trim());
+const CAPITAL = (t) => /^["“(]?[A-Z0-9]/.test(String(t || '').trim());
+
+/**
+ * Does this line plainly run on into the next — so a capital at the start of the next is not a new row?
+ *
+ * Two ways a line shows it is unfinished. It ends on a word that cannot end a phrase ("when the",
+ * "caused by", "or"). Or it ends on a capitalised word that is not the line's first: a name broken
+ * across the line — "the Dry / Boost option", "Ultra-Fine Filter or Fine / Filter is clogged".
+ * "Type of detergent" does neither, which is why "Soft water" beneath it stays in doubt.
+ */
+const UNFINISHED = /\b(?:the|a|an|of|or|and|to|for|with|in|on|at|by|from|is|are|was|be|been|not|when|if|your|their|this|that|than|then|into|has|have|may|can|will|should|must|new|each|per|no|too)$/i;
+function plainlyContinues(prevLine) {
+  const t = String(prevLine || '').trim();
+  if (/[,;–—-]$/.test(t) || UNFINISHED.test(t)) return true;
+  const words = t.split(/\s+/);
+  return words.length > 1 && /^["“(]?[A-Z]/.test(words[words.length - 1]);
+}
+
+function readThreeColumns(lines, firstPage) {
+  const symptoms = [];
+  let collided = 0;
+  let pageNow = firstPage;
+  let cols = null;          // { cause, action } for the page being read, from its own rows
+  let current = null;
+  let cause = null;
+  let prev = { blank: true, c: '', r: '' };
+  let started = false;
+  let skipping = false;     // inside a row whose columns collided — see `squeezed`
+
+  // A page's rows run from its header to the next form feed.
+  const columnsFor = (h, from) => {
+    const rows = [];
+    // …or to the next header: a page can carry several tables (WATER, then OPERATION), each set
+    // at its own columns.
+    for (let j = from; j < lines.length && !lines[j].includes('\f'); j++) {
+      if (HEADER3.test(lines[j])) break;
+      if (lines[j].trim() && !FURNITURE3.test(lines[j]) && !MARGIN_TAB.test(lines[j].trim())) rows.push(lines[j]);
+    }
+    const starts = rows.flatMap(chunkStarts);
+    const c2 = columnStart(starts.filter((x) => x > h.problem && x <= h.cause + 2));
+    const c3 = columnStart(starts.filter((x) => x > h.cause + 2 && x <= h.action + 2));
+    return { cause: c2 ?? h.cause, action: c3 ?? h.action };
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    let raw = lines[i];
+    if (raw.includes('\f')) {
+      if (typeof pageNow === 'number') pageNow += raw.split('\f').length - 1;
+      raw = raw.replace(/\f/g, '');
+      // A new page has to say it is still the table, near its top. One that does not is the manual
+      // having moved on — a warranty, an index — and reading it by column would invent rows.
+      if (started) {
+        let again = false;
+        for (let j = i, seen = 0; j < lines.length && seen < 14; j++) {
+          if (j > i && lines[j].includes('\f')) break;
+          if (!lines[j].trim()) continue;
+          seen++;
+          if (HEADER3.test(lines[j].replace(/\f/g, ''))) { again = true; break; }
+        }
+        if (!again) break;
+      }
+      cols = null;
+      prev = { blank: true, c: '', r: '' };
+    }
+
+    const h = HEADER3.exec(raw);
+    if (h) {
+      const problem = raw.indexOf(h[1]);
+      const causeAt = raw.indexOf(h[2], problem + h[1].length);
+      const action = raw.indexOf(h[3], causeAt + h[2].length);
+      cols = columnsFor({ problem, cause: causeAt, action }, i + 1);
+      started = true;
+      prev = { blank: true, c: '', r: '' };
+      continue;
+    }
+    if (!cols) continue;
+    if (!raw.trim()) { prev = { ...prev, blank: true }; continue; }
+    if (FURNITURE3.test(raw)) continue;
+    if (MARGIN_TAB.test(raw.trim())) continue;
+    // …or it shares a line with a real row, far out to the right: cut it off the end.
+    raw = raw.replace(/\s{6,}(?:Operating Instructions|Safety Instructions|Installation Instructions|Troubleshooting Tips|Consumer Support|Trouble|Tips)\s*$/i, '');
+
+    // A word that straddles a column edge means two columns ran together on this line. Cutting it
+    // would put half a word in each; the line is skipped and counted instead.
+    const straddles = (at) => at < raw.length && raw[at] !== ' ' && raw[at - 1] !== ' ' && raw[at - 1] !== undefined;
+    /*
+     * …and the collision that does NOT straddle, which is the dangerous one.
+     *
+     *     Water pumped out before Lid lifted or cycle was put in   • Reset cycle.
+     *
+     * The first column ran long, the typesetter closed the gap to one space, and the edge happens
+     * to fall on the space after "Lid". Nothing straddles; the cut gives the problem "Water pumped
+     * out before Lid" and hands "lifted or cycle was put in" to the cause on the row ABOVE. A real
+     * column gap is two spaces or more, so text on both sides of an edge with exactly one space
+     * between them is a collision too.
+     */
+    const squeezed = (at) => {
+      const left = raw.slice(0, at);
+      const right = raw.slice(at);
+      if (!left.trim() || !right.trim()) return false;
+      const gap = (left.length - left.trimEnd().length) + (right.length - right.trimStart().length);
+      return gap < 2;
+    };
+    if (straddles(cols.cause) || straddles(cols.action) || squeezed(cols.cause) || squeezed(cols.action)) {
+      // The row this line belongs to cannot be trusted, and neither can whatever wraps beneath it.
+      // Everything is dropped until a clean line starts the next problem.
+      if (process.env.SYMPTOMS_DEBUG) console.error(`collided @${cols.cause}/${cols.action}: ${raw.slice(0, 120)}`);
+      collided++;
+      skipping = true;
+      cause = null;
+      prev = { blank: false, c: 'x', r: 'x' };
+      continue;
+    }
+
+    const l = raw.slice(0, cols.cause).trim();
+    const c = raw.slice(cols.cause, cols.action).trim();
+    const r = raw.slice(cols.action).trim();
+
+    // A table row's cells are top-aligned, so a new cause begins on the line where a new remedy
+    // does. A bullet says so outright; otherwise it is a capital after the last remedy finished.
+    const bullet = /^[•▪■●]/.test(r);
+    const newRemedy = Boolean(r) && (bullet || (CAPITAL(r) && (!prev.r || ENDS(prev.r))));
+    // …and a remedy still in mid-sentence means the row has NOT ended, whatever the cause column
+    // does: "Some shaking/noise is normal." / "Dryer may be sitting unevenly" beside one remedy
+    // that runs across both lines is a single cell with two sentences in it, not two causes.
+    const midRemedy = Boolean(r) && !bullet && Boolean(prev.r) && !ENDS(prev.r) && !prev.blank;
+    const startsCause = Boolean(c) && CAPITAL(c) && !midRemedy && (prev.blank || !prev.c || ENDS(prev.c) || newRemedy);
+
+    if (skipping) {
+      if (!(startsCause && l && CAPITAL(l))) { prev = { blank: false, c, r }; continue; }
+      skipping = false;
+    }
+
+    if (startsCause) {
+      if (l && (CAPITAL(l) || !current)) {
+        current = { symptom: l, causes: [], line: i };
+        symptoms.push(current);
+      } else if (l && current) {
+        current.symptom = joinWrapped(current.symptom, l);
+      }
+      if (current) {
+        cause = { label: c, remedies: r ? [{ text: r, line: i }] : [], line: i, page: pageNow };
+        current.causes.push(cause);
+      }
+    } else {
+      if (l && current) current.symptom = joinWrapped(current.symptom, l);
+      else if (l && !current) { current = { symptom: l, causes: [], line: i }; symptoms.push(current); }
+      if (c && cause) {
+        /*
+         * A capital, folded into the cause above it, with nothing to say whether that was right.
+         *
+         * "Ultra-Fine Filter or Fine / Filter is clogged" is one cause wrapping onto a second line.
+         * "Type of detergent / Soft water" is two causes on consecutive lines. On the page they
+         * look the same when the second one has no remedy starting beside it — and joined they
+         * would both pass a check that only asks whether the words are printed there. So the row
+         * is kept, marked, and refused at admission (scripts/verify-against-pages.js) rather than
+         * believed.
+         */
+        if (CAPITAL(c) && prev.c && !ENDS(prev.c) && !plainlyContinues(prev.c)) cause.unsure = true;
+        cause.label = joinWrapped(cause.label, c);
+      }
+      if (r && cause) {
+        const last = cause.remedies[cause.remedies.length - 1];
+        if (last) last.text = joinWrapped(last.text, r);
+        else cause.remedies.push({ text: r, line: i });
+      }
+    }
+    prev = { blank: false, c, r };
+  }
+
+  // The remedy cell is prose. One sentence is one step, the way the two-column kind lists them —
+  // so the guide can read a step and wait, rather than a paragraph in one breath.
+  for (const s of symptoms) for (const k of s.causes) {
+    if (k.label) k.label = k.label.trim();
+    // A cell that lists its steps with bullets is cut at the bullets first; the bullet is scaffolding.
+    k.remedies = k.remedies.flatMap((x) => x.text.split(/\s*[•▪■●]\s+/).flatMap((b) => b.split(/(?<=[.?!])\s+(?=[A-Z"“(])/))
+      .map((t) => ({ text: t.replace(/^[•▪■●]\s*/, '').trim(), line: x.line })).filter((x2) => x2.text));
+  }
+  /*
+   * One remedy cell, printed beside several causes.
+   *
+   * Older GE tables list five causes of "Spots and filming" down the middle column and ONE cell
+   * beside them all: a sentence, then "To remove stubborn spots…: 1 Remove all metal utensils.
+   * 2 Do not add detergent. 3 Select the longest cycle." Read row by row, step 1 lands on the
+   * second cause and steps 2 and 3 on the third — "Overloading the dishwasher → Do not add
+   * detergent" — which is a pairing the manual never made. A remedy that opens at step two or
+   * later is the tell: the procedure began beside a different cause. Every cause of that problem
+   * is then in doubt, because there is no saying which of them the cell belongs to.
+   *
+   * And a cause whose words stop on "or the" lost its ending to a collision below it.
+   */
+  for (const s of symptoms) {
+    const shared = s.causes.some((k) => /^(?:[2-9]|1\d)[.)]?\s+\S/.test(k.remedies[0]?.text || ''));
+    for (const k of s.causes) {
+      if (shared) k.unsure = true;
+      if (k.label && UNFINISHED.test(k.label)) k.unsure = true;
+    }
+  }
+  return { symptoms, collided };
+}
+
+/**
+ * The cause column of a page, as one string — what a quotation is checked against.
+ *
+ * Flattening a whole page interleaves its columns, so a wrapped cause comes back with the other
+ * columns' words spliced into it. scripts/verify-against-pages.js needs the same column the reader
+ * took: everything right of the boundary for a two-column table, the middle column for three.
+ */
+function causeColumn(pageText) {
+  const lines = String(pageText || '').split(/\r?\n/);
+  const three = threeColumnHeader(lines);
+  if (three) {
+    const rows = lines.slice(three.line + 1).filter((x) => x.trim() && !HEADER3.test(x) && !FURNITURE3.test(x));
+    const starts = rows.flatMap(chunkStarts);
+    const c2 = columnStart(starts.filter((x) => x > three.problem && x <= three.cause + 2)) ?? three.cause;
+    const c3 = columnStart(starts.filter((x) => x > three.cause + 2 && x <= three.action + 2)) ?? three.action;
+    return lines.map((x) => x.slice(c2, c3)).join(' ');
+  }
+  const boundary = columnBoundary(lines);
+  return boundary ? lines.map((x) => x.slice(boundary.at)).join(' ') : '';
 }
 
 /**
@@ -570,5 +1010,4 @@ function splitAt(raw, at) {
 const slug = (s) =>
   String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'symptom';
 
-
-module.exports = { readSymptoms, columnBoundary, HEADER };
+module.exports = { readSymptoms, columnBoundary, causeColumn, threeColumnHeader, HEADER, HEADER3 };
